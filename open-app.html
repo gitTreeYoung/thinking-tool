@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>思考工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .container { 
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 90%;
+            color: #333;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 36px;
+            color: white;
+        }
+        h1 { color: #1f2937; margin-bottom: 10px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; }
+        input, textarea { 
+            width: 100%; 
+            padding: 12px; 
+            border: 2px solid #e1e5e9; 
+            border-radius: 8px; 
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus { 
+            outline: none; 
+            border-color: #667eea; 
+        }
+        button { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: translateY(-2px); }
+        .thoughts { 
+            margin-top: 30px; 
+            padding: 20px; 
+            background: #f8f9fa; 
+            border-radius: 12px; 
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .thought-item { 
+            background: white; 
+            padding: 15px; 
+            margin-bottom: 10px; 
+            border-radius: 8px; 
+            border-left: 4px solid #667eea;
+        }
+        .error { color: #e74c3c; margin-top: 10px; }
+        .success { color: #27ae60; margin-top: 10px; }
+        .question-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .question-text {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="icon">💡</div>
+            <h1>思考工具</h1>
+            <p>开始你的思考之旅</p>
+        </div>
+
+        <div id="loginForm">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="username" value="admin" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="password" value="admin123" placeholder="请输入密码">
+            </div>
+            <button onclick="login()">登录</button>
+            <div id="loginError" class="error"></div>
+        </div>
+
+        <div id="mainApp" style="display: none;">
+            <div class="question-nav">
+                <button onclick="previousQuestion()">← 上一题</button>
+                <span id="questionCounter">1 / 8</span>
+                <button onclick="nextQuestion()">下一题 →</button>
+            </div>
+            
+            <div class="question-text">
+                <h3 id="questionTitle">今天最让你印象深刻的事情是什么？</h3>
+                <p id="questionDesc">可以是一个人、一件事、一个想法，或者任何触动你的瞬间。</p>
+            </div>
+
+            <div class="form-group">
+                <label>记录你的思考</label>
+                <textarea id="thoughtInput" rows="6" placeholder="在这里记录你的思考..."></textarea>
+            </div>
+            <button onclick="saveThought()">保存思考</button>
+            <div id="saveMessage"></div>
+
+            <div class="thoughts">
+                <h4>思考历史</h4>
+                <div id="thoughtsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const questions = [
+            {
+                title: "今天最让你印象深刻的事情是什么？",
+                description: "可以是一个人、一件事、一个想法，或者任何触动你的瞬间。"
+            },
+            {
+                title: "如果你可以改变世界上的一件事，你会选择什么？",
+                description: "思考一下你认为最重要的社会、环境或个人问题。"
+            },
+            {
+                title: "描述一下你理想中的一天是什么样的？",
+                description: "从早晨醒来到晚上入睡，你希望如何度过完美的一天？"
+            },
+            {
+                title: "最近你学到了什么新东西？",
+                description: "可以是技能、知识、对自己或他人的理解等。"
+            },
+            {
+                title: "你最感激的三件事是什么？",
+                description: "花些时间思考生活中值得感恩的事物。"
+            },
+            {
+                title: "如果失败不是问题，你会尝试做什么？",
+                description: "想象一下没有失败恐惧的情况下，你最想追求的目标。"
+            },
+            {
+                title: "你希望别人记住你的什么特质？",
+                description: "思考你想要留给世界的印象和影响。"
+            },
+            {
+                title: "最近有什么事情让你感到困惑或不确定？",
+                description: "探讨那些让你思考和质疑的问题。"
+            }
+        ];
+
+        let currentQuestionIndex = 0;
+        let thoughts = {};
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (username === 'admin' && password === 'admin123') {
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('mainApp').style.display = 'block';
+                loadThoughts();
+                updateQuestion();
+            } else {
+                document.getElementById('loginError').textContent = '用户名或密码错误';
+            }
+        }
+
+        function updateQuestion() {
+            const question = questions[currentQuestionIndex];
+            document.getElementById('questionTitle').textContent = question.title;
+            document.getElementById('questionDesc').textContent = question.description;
+            document.getElementById('questionCounter').textContent = `${currentQuestionIndex + 1} / ${questions.length}`;
+            
+            // 加载当前问题的思考
+            const currentThoughts = thoughts[currentQuestionIndex] || [];
+            displayThoughts(currentThoughts);
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex = (currentQuestionIndex + 1) % questions.length;
+            updateQuestion();
+        }
+
+        function previousQuestion() {
+            currentQuestionIndex = currentQuestionIndex === 0 ? questions.length - 1 : currentQuestionIndex - 1;
+            updateQuestion();
+        }
+
+        function saveThought() {
+            const thoughtText = document.getElementById('thoughtInput').value.trim();
+            if (!thoughtText) {
+                document.getElementById('saveMessage').innerHTML = '<span class="error">请输入思考内容</span>';
+                return;
+            }
+
+            if (!thoughts[currentQuestionIndex]) {
+                thoughts[currentQuestionIndex] = [];
+            }
+            
+            thoughts[currentQuestionIndex].unshift({
+                content: thoughtText,
+                timestamp: new Date().toLocaleString('zh-CN')
+            });
+
+            document.getElementById('thoughtInput').value = '';
+            document.getElementById('saveMessage').innerHTML = '<span class="success">思考保存成功！</span>';
+            
+            saveThoughts();
+            displayThoughts(thoughts[currentQuestionIndex]);
+            
+            setTimeout(() => {
+                document.getElementById('saveMessage').innerHTML = '';
+            }, 3000);
+        }
+
+        function displayThoughts(thoughtList) {
+            const container = document.getElementById('thoughtsList');
+            if (thoughtList.length === 0) {
+                container.innerHTML = '<p>还没有思考记录，快来记录第一个想法吧！</p>';
+                return;
+            }
+
+            container.innerHTML = thoughtList.map(thought => `
+                <div class="thought-item">
+                    <p>${thought.content}</p>
+                    <small style="color: #666;">${thought.timestamp}</small>
+                </div>
+            `).join('');
+        }
+
+        function saveThoughts() {
+            localStorage.setItem('thinking_tool_thoughts', JSON.stringify(thoughts));
+        }
+
+        function loadThoughts() {
+            const saved = localStorage.getItem('thinking_tool_thoughts');
+            if (saved) {
+                thoughts = JSON.parse(saved);
+            }
+        }
+
+        // 自动登录演示
+        setTimeout(() => {
+            if (document.getElementById('loginForm').style.display !== 'none') {
+                // 可以在这里自动填充演示账户
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
