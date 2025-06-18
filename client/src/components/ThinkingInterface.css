@@ -1,0 +1,52 @@
+.thought-card {
+  position: relative;
+}
+
+.thought-card:hover .thought-actions {
+  opacity: 1 !important;
+}
+
+.thought-actions {
+  transition: opacity 0.2s ease;
+}
+
+/* Apple-like hover effects */
+.nav-button:hover {
+  background: rgba(0, 0, 0, 0.08) !important;
+  transform: scale(1.02);
+}
+
+.random-button:hover {
+  transform: translateY(-1px);
+  background: rgba(0, 122, 255, 0.15) !important;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.2) !important;
+}
+
+.primary-button:hover {
+  transform: translateY(-1px);
+  background: rgba(0, 122, 255, 0.15) !important;
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.2) !important;
+}
+
+.action-button:hover {
+  transform: scale(1.1);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .mobile-spacing {
+    margin-bottom: 32px !important;
+  }
+  
+  .mobile-header {
+    padding: 0 16px !important;
+  }
+  
+  .mobile-content {
+    padding: 16px !important;
+  }
+  
+  .mobile-card {
+    margin-bottom: 24px !important;
+  }
+}
