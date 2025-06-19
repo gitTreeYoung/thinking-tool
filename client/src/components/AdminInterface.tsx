@@ -17,7 +17,10 @@ import {
   Col,
   Divider,
   Tag,
-  Popconfirm
+  Popconfirm,
+  Checkbox,
+  List,
+  Tabs
 } from 'antd';
 import { 
   EditOutlined, 
@@ -31,7 +34,9 @@ import {
   RobotOutlined,
   CheckOutlined,
   CloseOutlined,
-  FilterOutlined
+  FilterOutlined,
+  SettingOutlined,
+  TagOutlined
 } from '@ant-design/icons';
 import { questionsAPI, adminAPI } from '../services/api';
 
@@ -64,7 +69,14 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
   const [importText, setImportText] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [showGeneratedResults, setShowGeneratedResults] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
+  const [activeTab, setActiveTab] = useState<string>('全部');
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [categoryForm] = Form.useForm();
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newQuestion, setNewQuestion] = useState({
@@ -95,7 +107,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
     setNewQuestion({
       title: '',
       description: '',
-      category: selectedCategory !== '全部' ? selectedCategory : ''
+      category: activeTab !== '全部' ? activeTab : ''
     });
   };
 
@@ -202,15 +214,53 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
     try {
       setAiGenerating(true);
       const result = await adminAPI.generateQuestionsWithAI(values);
+      setGeneratedQuestions(result.questions || []);
+      setSelectedQuestionIds(result.questions?.map((q: any) => q.id) || []);
+      setShowGeneratedResults(true);
       message.success(result.message || 'AI生成问题成功');
-      setAiModalVisible(false);
-      aiForm.resetFields();
-      loadQuestions();
     } catch (error: any) {
       console.error('Failed to generate questions with AI:', error);
       message.error(error.message || 'AI生成失败，请检查配置参数');
     } finally {
       setAiGenerating(false);
+    }
+  };
+
+  const handleImportSelected = async () => {
+    try {
+      const selectedQuestions = generatedQuestions.filter(q => selectedQuestionIds.includes(q.id));
+      if (selectedQuestions.length === 0) {
+        message.warning('请至少选择一个问题');
+        return;
+      }
+      
+      await adminAPI.importSelectedQuestions(selectedQuestions);
+      message.success(`成功导入 ${selectedQuestions.length} 个问题`);
+      setAiModalVisible(false);
+      setShowGeneratedResults(false);
+      setGeneratedQuestions([]);
+      setSelectedQuestionIds([]);
+      aiForm.resetFields();
+      loadQuestions();
+    } catch (error: any) {
+      console.error('Failed to import selected questions:', error);
+      message.error('导入失败');
+    }
+  };
+
+  const handleSelectAllQuestions = (checked: boolean) => {
+    if (checked) {
+      setSelectedQuestionIds(generatedQuestions.map(q => q.id));
+    } else {
+      setSelectedQuestionIds([]);
+    }
+  };
+
+  const handleQuestionSelect = (questionId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedQuestionIds(prev => [...prev, questionId]);
+    } else {
+      setSelectedQuestionIds(prev => prev.filter(id => id !== questionId));
     }
   };
 
@@ -220,13 +270,82 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
     return categories.sort();
   };
 
+  // 分类管理函数
+  const handleCreateCategory = async (values: { name: string }) => {
+    try {
+      // 检查分类是否已存在
+      const existingCategories = getCategories();
+      if (existingCategories.includes(values.name)) {
+        message.error('分类已存在');
+        return;
+      }
+      
+      // 创建一个默认问题在新分类下
+      await adminAPI.createQuestion({
+        title: `${values.name}示例问题`,
+        description: `这是${values.name}分类下的示例问题，您可以编辑或删除它。`,
+        category: values.name
+      });
+      
+      message.success('分类创建成功');
+      setCategoryModalVisible(false);
+      categoryForm.resetFields();
+      loadQuestions();
+    } catch (error) {
+      console.error('Failed to create category:', error);
+      message.error('创建分类失败');
+    }
+  };
+
+  const handleRenameCategory = async (values: { name: string }) => {
+    try {
+      if (!editingCategory) return;
+      
+      const questionsToUpdate = questions.filter(q => q.category === editingCategory);
+      
+      // 批量更新所有该分类下的问题
+      for (const question of questionsToUpdate) {
+        await adminAPI.updateQuestion(question.id, { 
+          ...question, 
+          category: values.name 
+        });
+      }
+      
+      message.success('分类重命名成功');
+      setCategoryModalVisible(false);
+      categoryForm.resetFields();
+      setEditingCategory(null);
+      loadQuestions();
+    } catch (error) {
+      console.error('Failed to rename category:', error);
+      message.error('重命名分类失败');
+    }
+  };
+
+  const handleDeleteCategory = async (categoryName: string) => {
+    try {
+      const questionsInCategory = questions.filter(q => q.category === categoryName);
+      
+      // 删除该分类下的所有问题
+      for (const question of questionsInCategory) {
+        await adminAPI.deleteQuestion(question.id);
+      }
+      
+      message.success('分类删除成功');
+      loadQuestions();
+    } catch (error) {
+      console.error('Failed to delete category:', error);
+      message.error('删除分类失败');
+    }
+  };
+
   // 过滤问题
   const filteredQuestions = questions.filter(question => {
     const matchesSearch = question.title.toLowerCase().includes(searchText.toLowerCase()) ||
       (question.description && question.description.toLowerCase().includes(searchText.toLowerCase())) ||
       (question.category && question.category.toLowerCase().includes(searchText.toLowerCase()));
     
-    const matchesCategory = selectedCategory === '全部' || question.category === selectedCategory;
+    const matchesCategory = activeTab === '全部' || question.category === activeTab;
     
     return matchesSearch && matchesCategory;
   });
@@ -523,18 +642,6 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
         </div>
 
         <Space>
-          <Select
-            value={selectedCategory}
-            onChange={setSelectedCategory}
-            style={{ width: 150, borderRadius: 12 }}
-            placeholder="筛选分类"
-            prefix={<FilterOutlined />}
-          >
-            <Option value="全部">全部分类</Option>
-            {getCategories().map(category => (
-              <Option key={category} value={category}>{category}</Option>
-            ))}
-          </Select>
           <Input
             placeholder="搜索问题..."
             prefix={<SearchOutlined />}
@@ -573,6 +680,13 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             </div>
             <Space>
               <Button 
+                icon={<SettingOutlined />}
+                onClick={() => setCategoryModalVisible(true)}
+                style={{ borderRadius: 12 }}
+              >
+                管理分类
+              </Button>
+              <Button 
                 icon={<FileTextOutlined />}
                 onClick={() => setImportModalVisible(true)}
                 style={{ borderRadius: 12 }}
@@ -597,6 +711,33 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             </Space>
           </div>
 
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            type="card"
+            style={{ marginBottom: 16 }}
+            items={[
+              {
+                key: '全部',
+                label: (
+                  <span>
+                    <TagOutlined />
+                    全部 ({questions.length})
+                  </span>
+                ),
+              },
+              ...getCategories().map(category => ({
+                key: category,
+                label: (
+                  <span>
+                    <TagOutlined />
+                    {category} ({questions.filter(q => q.category === category).length})
+                  </span>
+                ),
+              }))
+            ]}
+          />
+
           <Table
             columns={columns}
             dataSource={isAddingNew ? [
@@ -604,7 +745,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                 id: 'new-row',
                 title: '',
                 description: '',
-                category: '',
+                category: activeTab !== '全部' ? activeTab : '',
                 createdAt: new Date().toISOString(),
                 isNewRow: true
               },
@@ -713,82 +854,304 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
 
         {/* AI生成Modal */}
         <Modal
-          title="AI生成问题"
+          title={showGeneratedResults ? "选择要导入的问题" : "AI生成问题"}
           open={aiModalVisible}
-          onCancel={() => setAiModalVisible(false)}
+          onCancel={() => {
+            setAiModalVisible(false);
+            setShowGeneratedResults(false);
+            setGeneratedQuestions([]);
+            setSelectedQuestionIds([]);
+          }}
+          footer={null}
+          width={showGeneratedResults ? 800 : 600}
+        >
+          {showGeneratedResults ? (
+            // 显示生成结果选择界面
+            <div>
+              <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <Text strong>生成了 {generatedQuestions.length} 个问题</Text>
+                  <Text type="secondary" style={{ marginLeft: 8 }}>
+                    已选择 {selectedQuestionIds.length} 个
+                  </Text>
+                </div>
+                <Checkbox
+                  checked={selectedQuestionIds.length === generatedQuestions.length && generatedQuestions.length > 0}
+                  indeterminate={selectedQuestionIds.length > 0 && selectedQuestionIds.length < generatedQuestions.length}
+                  onChange={(e) => handleSelectAllQuestions(e.target.checked)}
+                >
+                  全选
+                </Checkbox>
+              </div>
+              
+              <div style={{ maxHeight: '500px', overflowY: 'auto', marginBottom: 16 }}>
+                <List
+                  dataSource={generatedQuestions}
+                  renderItem={(question: any) => (
+                    <List.Item
+                      style={{
+                        border: '1px solid #f0f0f0',
+                        borderRadius: 8,
+                        marginBottom: 8,
+                        padding: 16,
+                        background: selectedQuestionIds.includes(question.id) ? 'rgba(0, 122, 255, 0.04)' : '#fff'
+                      }}
+                    >
+                      <div style={{ width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                          <Checkbox
+                            checked={selectedQuestionIds.includes(question.id)}
+                            onChange={(e) => handleQuestionSelect(question.id, e.target.checked)}
+                            style={{ marginTop: 4 }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <Text strong style={{ fontSize: 14, display: 'block', marginBottom: 8 }}>
+                              {question.title}
+                            </Text>
+                            {question.description && (
+                              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                                {question.description}
+                              </Text>
+                            )}
+                            {question.category && (
+                              <Tag color="blue" style={{ borderRadius: 4 }}>
+                                {question.category}
+                              </Tag>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <Button 
+                  onClick={() => {
+                    setShowGeneratedResults(false);
+                    setGeneratedQuestions([]);
+                    setSelectedQuestionIds([]);
+                  }}
+                  style={{ borderRadius: 12 }}
+                >
+                  重新生成
+                </Button>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <Button 
+                    onClick={() => {
+                      setAiModalVisible(false);
+                      setShowGeneratedResults(false);
+                      setGeneratedQuestions([]);
+                      setSelectedQuestionIds([]);
+                    }}
+                    style={{ borderRadius: 12 }}
+                  >
+                    取消
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    onClick={handleImportSelected}
+                    disabled={selectedQuestionIds.length === 0}
+                    style={{ borderRadius: 12 }}
+                  >
+                    导入选中问题 ({selectedQuestionIds.length})
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // 显示AI配置界面
+            <Form form={aiForm} layout="vertical" onFinish={handleAIGenerate} initialValues={{
+              baseUrl: 'https://api.openai.com/v1',
+              modelName: 'gpt-3.5-turbo',
+              count: 10,
+              prompt: '请生成一些关于个人成长和自我反思的深度思考问题，帮助用户更好地了解自己，发现内心的想法和感受。'
+            }}>
+              <div style={{ marginBottom: 16, padding: 12, background: 'rgba(0, 122, 255, 0.04)', borderRadius: 8, border: '1px solid rgba(0, 122, 255, 0.2)' }}>
+                <Text style={{ fontSize: 12, color: '#1d1d1f' }}>
+                  💡 支持所有兼容OpenAI格式的API服务，如：OpenAI、Azure OpenAI、Claude、本地部署的模型等
+                </Text>
+              </div>
+              
+              <Form.Item
+                name="baseUrl"
+                label="API Base URL"
+                rules={[{ required: true, message: '请输入API Base URL' }]}
+              >
+                <Input placeholder="例如: https://api.openai.com/v1" style={{ borderRadius: 12 }} />
+              </Form.Item>
+              
+              <Form.Item
+                name="apiKey"
+                label="API Key"
+                rules={[{ required: true, message: '请输入API Key' }]}
+              >
+                <Input.Password placeholder="输入你的API Key" style={{ borderRadius: 12 }} />
+              </Form.Item>
+              
+              <Form.Item
+                name="modelName"
+                label="模型名称"
+                rules={[{ required: true, message: '请输入模型名称' }]}
+              >
+                <Input placeholder="例如: gpt-3.5-turbo, gpt-4, claude-3-sonnet" style={{ borderRadius: 12 }} />
+              </Form.Item>
+              
+              <Form.Item
+                name="prompt"
+                label="生成提示"
+                rules={[{ required: true, message: '请输入生成提示' }]}
+              >
+                <TextArea 
+                  rows={4} 
+                  placeholder="描述你想要生成的问题类型和风格，例如：关于人际关系的思考问题、适合早晨反思的问题等..."
+                  style={{ borderRadius: 12 }}
+                />
+              </Form.Item>
+              
+              <Form.Item
+                name="count"
+                label="生成数量"
+                rules={[{ required: true, message: '请输入生成数量' }]}
+              >
+                <Input type="number" min={1} max={50} placeholder="建议1-20个" style={{ borderRadius: 12 }} />
+              </Form.Item>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                <Button onClick={() => setAiModalVisible(false)} style={{ borderRadius: 12 }}>
+                  取消
+                </Button>
+                <Button 
+                  type="primary" 
+                  htmlType="submit" 
+                  loading={aiGenerating}
+                  style={{ borderRadius: 12 }}
+                >
+                  {aiGenerating ? '生成中...' : '生成'}
+                </Button>
+              </div>
+            </Form>
+          )}
+        </Modal>
+
+        {/* 分类管理Modal */}
+        <Modal
+          title={editingCategory ? "重命名分类" : "管理分类"}
+          open={categoryModalVisible}
+          onCancel={() => {
+            setCategoryModalVisible(false);
+            setEditingCategory(null);
+            categoryForm.resetFields();
+          }}
           footer={null}
           width={600}
         >
-          <Form form={aiForm} layout="vertical" onFinish={handleAIGenerate} initialValues={{
-            baseUrl: 'https://api.openai.com/v1',
-            modelName: 'gpt-3.5-turbo',
-            count: 10,
-            prompt: '请生成一些关于个人成长和自我反思的深度思考问题，帮助用户更好地了解自己，发现内心的想法和感受。'
-          }}>
-            <div style={{ marginBottom: 16, padding: 12, background: 'rgba(0, 122, 255, 0.04)', borderRadius: 8, border: '1px solid rgba(0, 122, 255, 0.2)' }}>
-              <Text style={{ fontSize: 12, color: '#1d1d1f' }}>
-                💡 支持所有兼容OpenAI格式的API服务，如：OpenAI、Azure OpenAI、Claude、本地部署的模型等
-              </Text>
-            </div>
-            
-            <Form.Item
-              name="baseUrl"
-              label="API Base URL"
-              rules={[{ required: true, message: '请输入API Base URL' }]}
-            >
-              <Input placeholder="例如: https://api.openai.com/v1" style={{ borderRadius: 12 }} />
-            </Form.Item>
-            
-            <Form.Item
-              name="apiKey"
-              label="API Key"
-              rules={[{ required: true, message: '请输入API Key' }]}
-            >
-              <Input.Password placeholder="输入你的API Key" style={{ borderRadius: 12 }} />
-            </Form.Item>
-            
-            <Form.Item
-              name="modelName"
-              label="模型名称"
-              rules={[{ required: true, message: '请输入模型名称' }]}
-            >
-              <Input placeholder="例如: gpt-3.5-turbo, gpt-4, claude-3-sonnet" style={{ borderRadius: 12 }} />
-            </Form.Item>
-            
-            <Form.Item
-              name="prompt"
-              label="生成提示"
-              rules={[{ required: true, message: '请输入生成提示' }]}
-            >
-              <TextArea 
-                rows={4} 
-                placeholder="描述你想要生成的问题类型和风格，例如：关于人际关系的思考问题、适合早晨反思的问题等..."
-                style={{ borderRadius: 12 }}
-              />
-            </Form.Item>
-            
-            <Form.Item
-              name="count"
-              label="生成数量"
-              rules={[{ required: true, message: '请输入生成数量' }]}
-            >
-              <Input type="number" min={1} max={50} placeholder="建议1-20个" style={{ borderRadius: 12 }} />
-            </Form.Item>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
-              <Button onClick={() => setAiModalVisible(false)} style={{ borderRadius: 12 }}>
-                取消
-              </Button>
-              <Button 
-                type="primary" 
-                htmlType="submit" 
-                loading={aiGenerating}
-                style={{ borderRadius: 12 }}
+          {editingCategory ? (
+            // 重命名分类表单
+            <Form form={categoryForm} layout="vertical" onFinish={handleRenameCategory}>
+              <Form.Item
+                name="name"
+                label="新分类名称"
+                rules={[{ required: true, message: '请输入分类名称' }]}
+                initialValue={editingCategory}
               >
-                {aiGenerating ? '生成中...' : '生成'}
-              </Button>
+                <Input placeholder="输入分类名称" style={{ borderRadius: 12 }} />
+              </Form.Item>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                <Button 
+                  onClick={() => {
+                    setEditingCategory(null);
+                    categoryForm.resetFields();
+                  }}
+                  style={{ borderRadius: 12 }}
+                >
+                  取消
+                </Button>
+                <Button type="primary" htmlType="submit" style={{ borderRadius: 12 }}>
+                  保存
+                </Button>
+              </div>
+            </Form>
+          ) : (
+            // 分类列表和管理
+            <div>
+              <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text strong>当前分类</Text>
+                <Button 
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => categoryForm.submit()}
+                  style={{ borderRadius: 12 }}
+                >
+                  创建新分类
+                </Button>
+              </div>
+              
+              <Form form={categoryForm} layout="inline" onFinish={handleCreateCategory} style={{ marginBottom: 16 }}>
+                <Form.Item
+                  name="name"
+                  rules={[{ required: true, message: '请输入分类名称' }]}
+                  style={{ flex: 1 }}
+                >
+                  <Input placeholder="输入新分类名称" style={{ borderRadius: 12 }} />
+                </Form.Item>
+              </Form>
+              
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                <List
+                  dataSource={getCategories()}
+                  renderItem={(category) => (
+                    <List.Item
+                      style={{
+                        border: '1px solid #f0f0f0',
+                        borderRadius: 8,
+                        marginBottom: 8,
+                        padding: 16,
+                        background: '#fff'
+                      }}
+                      actions={[
+                        <Button
+                          type="text"
+                          icon={<EditOutlined />}
+                          onClick={() => {
+                            setEditingCategory(category);
+                            categoryForm.setFieldsValue({ name: category });
+                          }}
+                          style={{ borderRadius: 8 }}
+                        >
+                          重命名
+                        </Button>,
+                        <Popconfirm
+                          title="确定删除这个分类吗？"
+                          description="删除分类将同时删除该分类下的所有问题"
+                          onConfirm={() => handleDeleteCategory(category)}
+                          okText="确定"
+                          cancelText="取消"
+                        >
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            style={{ borderRadius: 8 }}
+                          >
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      ]}
+                    >
+                      <List.Item.Meta
+                        avatar={<TagOutlined style={{ color: '#007AFF' }} />}
+                        title={category}
+                        description={`${questions.filter(q => q.category === category).length} 个问题`}
+                      />
+                    </List.Item>
+                  )}
+                />
+              </div>
             </div>
-          </Form>
+          )}
         </Modal>
       </Content>
     </Layout>

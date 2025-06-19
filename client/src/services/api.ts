@@ -114,6 +114,11 @@ export const adminAPI = isStaticDeployment ? localAdminAPI : {
   batchImportQuestions: (questions: Array<{ title: string; description?: string; category?: string }>) =>
     api.post('/admin/questions/batch-import', { questions }).then(res => res.data),
   
+  importSelectedQuestions: (questions: Question[]) =>
+    isStaticDeployment 
+      ? localAdminAPI.importSelectedQuestions(questions)
+      : api.post('/admin/questions/import-selected', { questions }).then(res => res.data),
+
   generateQuestionsWithAI: (data: {
     baseUrl: string;
     apiKey: string;

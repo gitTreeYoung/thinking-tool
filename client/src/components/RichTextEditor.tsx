@@ -116,7 +116,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       <MDEditor
         value={value}
         onChange={(val) => onChange(val || '')}
-        preview="edit"
+        preview="live"
         hideToolbar={false}
         height={300}
         data-color-mode="light"

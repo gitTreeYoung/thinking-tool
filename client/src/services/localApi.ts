@@ -637,6 +637,14 @@ export const localAdminAPI = {
     return { message: `成功导入 ${newQuestions.length} 个问题` };
   },
 
+  importSelectedQuestions: async (questions: Question[]): Promise<{ message: string }> => {
+    await delay(300);
+    const existingQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUESTIONS) || '[]');
+    existingQuestions.push(...questions);
+    localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(existingQuestions));
+    return { message: `成功导入 ${questions.length} 个问题` };
+  },
+
   generateQuestionsWithAI: async (params: {
     baseUrl: string;
     apiKey: string;
@@ -722,8 +730,7 @@ export const localAdminAPI = {
         throw new Error('没有生成有效的问题');
       }
 
-      // 保存到本地存储
-      const existingQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUESTIONS) || '[]');
+      // 返回生成的问题，不直接保存
       const newQuestions = validQuestions.map(q => ({
         id: uuidv4(),
         title: q.title,
@@ -732,11 +739,8 @@ export const localAdminAPI = {
         createdAt: new Date().toISOString()
       }));
 
-      existingQuestions.push(...newQuestions);
-      localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(existingQuestions));
-
       return { 
-        message: `成功生成并添加了 ${newQuestions.length} 个问题`,
+        message: `成功生成了 ${newQuestions.length} 个问题`,
         questions: newQuestions
       };
 

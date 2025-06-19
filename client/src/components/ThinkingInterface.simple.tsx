@@ -12,7 +12,11 @@ import {
   message,
   Row,
   Col,
-  Select
+  Select,
+  Modal,
+  Form,
+  Switch,
+  Radio
 } from 'antd';
 import RichTextEditor from './RichTextEditor';
 import MDEditor from '@uiw/react-md-editor';
@@ -29,10 +33,15 @@ import {
   CheckOutlined,
   CloseOutlined,
   ReloadOutlined,
-  FilterOutlined
+  FilterOutlined,
+  SettingOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined
 } from '@ant-design/icons';
 import { questionsAPI, thoughtsAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { configService, AppConfig } from '../services/configService';
+import FeedView from './FeedView';
 
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -70,6 +79,9 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
   const [saving, setSaving] = useState(false);
   const [editingThought, setEditingThought] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
+  const [config, setConfig] = useState<AppConfig>(configService.getConfig());
+  const [configModalVisible, setConfigModalVisible] = useState(false);
+  const [configForm] = Form.useForm();
   const { logout, user } = useAuth();
 
   useEffect(() => {
@@ -317,6 +329,18 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
     }
   };
 
+  const handleConfigSave = (values: Partial<AppConfig>) => {
+    const newConfig = configService.saveConfig(values);
+    setConfig(newConfig);
+    setConfigModalVisible(false);
+    message.success('配置保存成功');
+  };
+
+  // 如果是Feed流模式，直接返回FeedView
+  if (config.viewMode === 'feed') {
+    return <FeedView />;
+  }
+
   if (loading) {
     return (
       <div style={{ 
@@ -403,6 +427,16 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
         
         <Space>
           <Text>{user?.username}</Text>
+          <Button 
+            type="text"
+            icon={<SettingOutlined />}
+            onClick={() => {
+              configForm.setFieldsValue(config);
+              setConfigModalVisible(true);
+            }}
+          >
+            设置
+          </Button>
           <Button 
             type="text" 
             onClick={() => {
@@ -792,6 +826,85 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
             </Col>
           </Row>
       </Content>
+
+      {/* 配置Modal */}
+      <Modal
+        title="应用设置"
+        open={configModalVisible}
+        onCancel={() => setConfigModalVisible(false)}
+        footer={null}
+        width={500}
+      >
+        <Form 
+          form={configForm} 
+          layout="vertical" 
+          onFinish={handleConfigSave}
+          initialValues={config}
+        >
+          <Form.Item
+            name="viewMode"
+            label="视图模式"
+            help="选择你喜欢的思考界面样式"
+          >
+            <Radio.Group>
+              <Space direction="vertical">
+                <Radio value="single">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AppstoreOutlined />
+                    <div>
+                      <div style={{ fontWeight: 500 }}>单问题视图</div>
+                      <div style={{ fontSize: 12, color: '#86868b' }}>
+                        专注模式，一次只显示一个问题
+                      </div>
+                    </div>
+                  </div>
+                </Radio>
+                <Radio value="feed">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UnorderedListOutlined />
+                    <div>
+                      <div style={{ fontWeight: 500 }}>Feed流视图</div>
+                      <div style={{ fontSize: 12, color: '#86868b' }}>
+                        朋友圈式展示，可以滚动浏览所有问题和思考
+                      </div>
+                    </div>
+                  </div>
+                </Radio>
+              </Space>
+            </Radio.Group>
+          </Form.Item>
+
+          <Form.Item
+            name="feedAutoRefresh"
+            label="自动刷新"
+            valuePropName="checked"
+          >
+            <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+          </Form.Item>
+
+          <Form.Item
+            name="darkMode"
+            label="暗色模式"
+            valuePropName="checked"
+          >
+            <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+          </Form.Item>
+
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'flex-end', 
+            gap: 12, 
+            marginTop: 24 
+          }}>
+            <Button onClick={() => setConfigModalVisible(false)}>
+              取消
+            </Button>
+            <Button type="primary" htmlType="submit">
+              保存设置
+            </Button>
+          </div>
+        </Form>
+      </Modal>
     </Layout>
   );
 };
