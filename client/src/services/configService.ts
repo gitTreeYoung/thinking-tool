@@ -1,5 +1,5 @@
 // 配置服务
-interface AppConfig {
+export interface AppConfig {
   viewMode: 'single' | 'feed'; // 单个问题视图 或 Feed流视图
   feedAutoRefresh: boolean; // Feed流是否自动刷新
   darkMode: boolean; // 暗色模式
@@ -54,5 +54,3 @@ export const configService = {
     }
   }
 };
-
-export type { AppConfig };
