@@ -3,7 +3,6 @@ import {
   localAuthAPI, 
   localQuestionsAPI, 
   localThoughtsAPI, 
-  localSeriesAPI, 
   localAdminAPI 
 } from './localApi';
 
@@ -125,36 +124,5 @@ export const adminAPI = isStaticDeployment ? localAdminAPI : {
     api.post('/admin/questions/ai-generate', data).then(res => res.data),
 };
 
-export const seriesAPI = isStaticDeployment ? localSeriesAPI : {
-  getAll: () =>
-    api.get('/series').then(res => res.data),
-  
-  getById: (id: string) =>
-    api.get(`/series/${id}`).then(res => res.data),
-  
-  getQuestions: (id: string) =>
-    api.get(`/series/${id}/questions`).then(res => res.data),
-  
-  create: (data: { name: string; description?: string; icon?: string; color?: string }) =>
-    api.post('/series', data).then(res => res.data),
-  
-  update: (id: string, data: { name?: string; description?: string; icon?: string; color?: string }) =>
-    api.put(`/series/${id}`, data).then(res => res.data),
-  
-  delete: (id: string) =>
-    api.delete(`/series/${id}`),
-  
-  addQuestion: (seriesId: string, data: { questionId: string; orderIndex?: number }) =>
-    api.post(`/series/${seriesId}/questions`, data).then(res => res.data),
-  
-  removeQuestion: (seriesId: string, questionId: string) =>
-    api.delete(`/series/${seriesId}/questions/${questionId}`),
-  
-  updateQuestionOrder: (seriesId: string, questionOrders: Array<{ questionId: string; orderIndex: number }>) =>
-    api.put(`/series/${seriesId}/questions/order`, { questionOrders }).then(res => res.data),
-  
-  updateQuestion: (seriesId: string, seriesQuestionId: string, data: { questionId?: string; orderIndex?: number }) =>
-    api.put(`/series/${seriesId}/questions/${seriesQuestionId}`, data).then(res => res.data),
-};
 
 export default api;

@@ -26,23 +26,6 @@ interface ThoughtEntry {
   updatedAt: string;
 }
 
-interface QuestionSeries {
-  id: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  questionCount: number;
-  createdAt: string;
-}
-
-interface SeriesQuestion {
-  id: string;
-  seriesId: string;
-  questionId: string;
-  orderIndex: number;
-  question: Question;
-}
 
 // 本地存储键名
 const STORAGE_KEYS = {
@@ -50,14 +33,17 @@ const STORAGE_KEYS = {
   TOKEN: 'thinking_tool_token',
   QUESTIONS: 'thinking_tool_questions',
   THOUGHTS: 'thinking_tool_thoughts',
-  SERIES: 'thinking_tool_series',
-  SERIES_QUESTIONS: 'thinking_tool_series_questions',
 };
 
 // 初始化默认数据
 const initializeDefaultData = () => {
-  if (!localStorage.getItem(STORAGE_KEYS.QUESTIONS)) {
+  // 检查是否需要扩展问题库
+  const existingQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUESTIONS) || '[]');
+  
+  if (existingQuestions.length === 0) {
+    // 全新用户，添加完整的默认问题库
     const defaultQuestions: Question[] = [
+      // 日常思考类
       {
         id: uuidv4(),
         title: "今天最让你印象深刻的事情是什么？",
@@ -67,11 +53,43 @@ const initializeDefaultData = () => {
       },
       {
         id: uuidv4(),
+        title: "今天你做了什么让自己感到骄傲的事情？",
+        description: "无论大小，回顾一下你今天的成就和进步。",
+        category: "日常思考",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "你今天遇到的最大挑战是什么，你是如何应对的？",
+        description: "思考一下困难时刻和你的解决方案。",
+        category: "日常思考",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 价值观类
+      {
+        id: uuidv4(),
         title: "如果你可以改变世界上的一件事，你会选择什么？",
         description: "思考一下你认为最重要的社会、环境或个人问题。",
         category: "价值观",
         createdAt: new Date().toISOString()
       },
+      {
+        id: uuidv4(),
+        title: "什么是你生活中最重要的三个价值观？",
+        description: "想想什么原则指导着你的决定和行为。",
+        category: "价值观",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "你认为什么样的人生才算有意义？",
+        description: "思考一下你对人生意义和目的的理解。",
+        category: "价值观",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 生活愿景类
       {
         id: uuidv4(),
         title: "描述一下你理想中的一天是什么样的？",
@@ -81,6 +99,22 @@ const initializeDefaultData = () => {
       },
       {
         id: uuidv4(),
+        title: "5年后你希望自己变成什么样的人？",
+        description: "想象一下未来的你，包括性格、技能、生活状态等。",
+        category: "生活愿景",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "如果金钱不是问题，你最想做什么？",
+        description: "去除经济限制，思考你真正的兴趣和梦想。",
+        category: "生活愿景",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 学习成长类
+      {
+        id: uuidv4(),
         title: "你最近学到的最有价值的一课是什么？",
         description: "可以是从经历、书籍、他人或任何地方学到的。",
         category: "学习成长",
@@ -88,74 +122,327 @@ const initializeDefaultData = () => {
       },
       {
         id: uuidv4(),
-        title: "现在最让你感激的三件事是什么？",
-        description: "可以是大事也可以是小事，重要的是它们带给你的感受。",
-        category: "感恩",
-        createdAt: new Date().toISOString()
-      }
-    ];
-    localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(defaultQuestions));
-  }
-
-  if (!localStorage.getItem(STORAGE_KEYS.SERIES)) {
-    const questionsList = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUESTIONS) || '[]');
-    const defaultSeries: QuestionSeries[] = [
-      {
-        id: uuidv4(),
-        name: "早安日记",
-        description: "用积极的心态开始新的一天",
-        icon: "☀️",
-        color: "#f59e0b",
-        questionCount: 2,
+        title: "你想要培养的下一个技能或习惯是什么？",
+        description: "思考一下你想要改进或学习的新东西。",
+        category: "学习成长",
         createdAt: new Date().toISOString()
       },
       {
         id: uuidv4(),
-        name: "晚安日记",
-        description: "回顾今天，准备迎接明天",
-        icon: "🌙",
-        color: "#4f46e5",
-        questionCount: 2,
+        title: "最近有什么事情让你走出了舒适圈？",
+        description: "回顾一下那些挑战你、让你成长的经历。",
+        category: "学习成长",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 感恩类
+      {
+        id: uuidv4(),
+        title: "现在最让你感激的三件事是什么？",
+        description: "可以是大事也可以是小事，重要的是它们带给你的感受。",
+        category: "感恩",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天有哪个人让你的生活变得更美好？",
+        description: "想想那些给你带来正面影响的人。",
+        category: "感恩",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "你拥有的哪些看似平凡的东西其实很珍贵？",
+        description: "重新审视那些容易被忽视的美好。",
+        category: "感恩",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 人际关系类
+      {
+        id: uuidv4(),
+        title: "描述一个对你很重要的人，以及他们为什么特别？",
+        description: "思考一下那些在你生命中留下深刻印记的人。",
+        category: "人际关系",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "你希望别人如何记住你？",
+        description: "想想你想在他人心中留下什么样的印象。",
+        category: "人际关系",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "最近你有没有主动关心或帮助过别人？",
+        description: "回顾一下你的善举和对他人的影响。",
+        category: "人际关系",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 创造力类
+      {
+        id: uuidv4(),
+        title: "如果你要写一本书，会是关于什么的？",
+        description: "发挥想象力，思考你想要分享的故事或知识。",
+        category: "创造力",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "用三个词描述今天的心情，并解释为什么？",
+        description: "练习情感表达和自我觉察。",
+        category: "创造力",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "如果你能发明一样东西来改善人们的生活，会是什么？",
+        description: "发挥创造力，思考解决问题的新方法。",
+        category: "创造力",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 早安日记类
+      {
+        id: uuidv4(),
+        title: "今天早晨醒来时的第一个想法是什么？",
+        description: "记录清晨第一缕思绪，观察内心的声音。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天你最期待的一件事是什么？",
+        description: "想想今天有什么让你充满期待和兴奋的事情。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "如果今天只能完成三件事，你会选择哪三件？",
+        description: "思考今天的优先级，明确最重要的任务。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天你想给自己设定什么样的心情基调？",
+        description: "主动选择今天的情绪状态和精神面貌。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "昨晚的梦境中有什么特别的画面吗？",
+        description: "回顾梦境，探索潜意识的信息。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天你想要学习或尝试什么新的东西？",
+        description: "为今天设定一个小小的成长目标。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 晚安日记类
+      {
+        id: uuidv4(),
+        title: "今天最让你感到满足的时刻是什么？",
+        description: "回顾今天，找到那个让你内心充实的瞬间。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天你克服了什么困难或挑战？",
+        description: "认可自己今天的努力和成长。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天有什么事情让你感到意外或惊喜？",
+        description: "发现生活中的小惊喜和美好瞬间。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "如果可以重新来过，今天你会做什么不同的选择？",
+        description: "反思今天的决定，为明天积累智慧。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天你感谢生活中的哪个人或事？",
+        description: "在一天结束时表达感恩之心。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "明天你最想做的一件事是什么？",
+        description: "带着期待和计划进入梦乡。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 反思类
+      {
+        id: uuidv4(),
+        title: "你觉得自己最大的优点和最需要改进的地方是什么？",
+        description: "诚实地评估自己的长处和成长空间。",
+        category: "自我反思",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "如果可以给一年前的自己一个建议，会是什么？",
+        description: "回顾过去，总结经验和教训。",
+        category: "自我反思",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "什么时候你感到最像真正的自己？",
+        description: "思考那些让你感到真实和自在的时刻。",
+        category: "自我反思",
         createdAt: new Date().toISOString()
       }
     ];
-    localStorage.setItem(STORAGE_KEYS.SERIES, JSON.stringify(defaultSeries));
-
-    // 创建系列问题关联
-    if (questionsList.length >= 4) {
-      const seriesQuestions: SeriesQuestion[] = [
-        {
-          id: uuidv4(),
-          seriesId: defaultSeries[0].id,
-          questionId: questionsList[0].id,
-          orderIndex: 1,
-          question: questionsList[0]
-        },
-        {
-          id: uuidv4(),
-          seriesId: defaultSeries[0].id,
-          questionId: questionsList[3].id,
-          orderIndex: 2,
-          question: questionsList[3]
-        },
-        {
-          id: uuidv4(),
-          seriesId: defaultSeries[1].id,
-          questionId: questionsList[1].id,
-          orderIndex: 1,
-          question: questionsList[1]
-        },
-        {
-          id: uuidv4(),
-          seriesId: defaultSeries[1].id,
-          questionId: questionsList[4].id,
-          orderIndex: 2,
-          question: questionsList[4]
-        }
-      ];
-      localStorage.setItem(STORAGE_KEYS.SERIES_QUESTIONS, JSON.stringify(seriesQuestions));
-    }
+    localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(defaultQuestions));
+  } else if (existingQuestions.length <= 15) {
+    // 如果问题数量较少，说明是老用户，扩展问题库但保留现有数据
+    const additionalQuestions: Question[] = [
+      // 添加更多问题但保留现有的思考历史
+      {
+        id: uuidv4(),
+        title: "今天你做了什么让自己感到骄傲的事情？",
+        description: "无论大小，回顾一下你今天的成就和进步。",
+        category: "日常思考",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "你今天遇到的最大挑战是什么，你是如何应对的？",
+        description: "思考一下困难时刻和你的解决方案。",
+        category: "日常思考",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "什么是你生活中最重要的三个价值观？",
+        description: "想想什么原则指导着你的决定和行为。",
+        category: "价值观",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "5年后你希望自己变成什么样的人？",
+        description: "想象一下未来的你，包括性格、技能、生活状态等。",
+        category: "生活愿景",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "你想要培养的下一个技能或习惯是什么？",
+        description: "思考一下你想要改进或学习的新东西。",
+        category: "学习成长",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天有哪个人让你的生活变得更美好？",
+        description: "想想那些给你带来正面影响的人。",
+        category: "感恩",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "描述一个对你很重要的人，以及他们为什么特别？",
+        description: "思考一下那些在你生命中留下深刻印记的人。",
+        category: "人际关系",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "如果你要写一本书，会是关于什么的？",
+        description: "发挥想象力，思考你想要分享的故事或知识。",
+        category: "创造力",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "你觉得自己最大的优点和最需要改进的地方是什么？",
+        description: "诚实地评估自己的长处和成长空间。",
+        category: "自我反思",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "什么时候你感到最像真正的自己？",
+        description: "思考那些让你感到真实和自在的时刻。",
+        category: "自我反思",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 早安日记类
+      {
+        id: uuidv4(),
+        title: "今天早晨醒来时的第一个想法是什么？",
+        description: "记录清晨第一缕思绪，观察内心的声音。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天你最期待的一件事是什么？",
+        description: "想想今天有什么让你充满期待和兴奋的事情。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "如果今天只能完成三件事，你会选择哪三件？",
+        description: "思考今天的优先级，明确最重要的任务。",
+        category: "早安日记",
+        createdAt: new Date().toISOString()
+      },
+      
+      // 晚安日记类
+      {
+        id: uuidv4(),
+        title: "今天最让你感到满足的时刻是什么？",
+        description: "回顾今天，找到那个让你内心充实的瞬间。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天你克服了什么困难或挑战？",
+        description: "认可自己今天的努力和成长。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: uuidv4(),
+        title: "今天有什么事情让你感到意外或惊喜？",
+        description: "发现生活中的小惊喜和美好瞬间。",
+        category: "晚安日记",
+        createdAt: new Date().toISOString()
+      }
+    ];
+    
+    // 合并现有和新增的问题
+    const allQuestions = [...existingQuestions, ...additionalQuestions];
+    localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(allQuestions));
   }
+
 };
 
 // 模拟延迟
@@ -289,141 +576,6 @@ export const localThoughtsAPI = {
   }
 };
 
-export const localSeriesAPI = {
-  getAll: async (): Promise<QuestionSeries[]> => {
-    await delay(300);
-    initializeDefaultData();
-    const series = localStorage.getItem(STORAGE_KEYS.SERIES);
-    return series ? JSON.parse(series) : [];
-  },
-
-  getById: async (id: string): Promise<QuestionSeries> => {
-    await delay(200);
-    const series = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES) || '[]');
-    const item = series.find((s: QuestionSeries) => s.id === id);
-    if (!item) throw new Error('系列不存在');
-    return item;
-  },
-
-  getQuestions: async (id: string): Promise<SeriesQuestion[]> => {
-    await delay(200);
-    const seriesQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES_QUESTIONS) || '[]');
-    return seriesQuestions.filter((sq: SeriesQuestion) => sq.seriesId === id);
-  },
-
-  create: async (data: { name: string; description?: string; icon?: string; color?: string }): Promise<QuestionSeries> => {
-    await delay(300);
-    const newSeries: QuestionSeries = {
-      id: uuidv4(),
-      name: data.name,
-      description: data.description,
-      icon: data.icon,
-      color: data.color,
-      questionCount: 0,
-      createdAt: new Date().toISOString()
-    };
-
-    const series = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES) || '[]');
-    series.push(newSeries);
-    localStorage.setItem(STORAGE_KEYS.SERIES, JSON.stringify(series));
-
-    return newSeries;
-  },
-
-  update: async (id: string, data: { name?: string; description?: string; icon?: string; color?: string }): Promise<QuestionSeries> => {
-    await delay(300);
-    const series = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES) || '[]');
-    const index = series.findIndex((s: QuestionSeries) => s.id === id);
-    
-    if (index === -1) throw new Error('系列不存在');
-    
-    series[index] = { ...series[index], ...data };
-    localStorage.setItem(STORAGE_KEYS.SERIES, JSON.stringify(series));
-    return series[index];
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await delay(200);
-    const series = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES) || '[]');
-    const filtered = series.filter((s: QuestionSeries) => s.id !== id);
-    localStorage.setItem(STORAGE_KEYS.SERIES, JSON.stringify(filtered));
-
-    // 同时删除相关的系列问题
-    const seriesQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES_QUESTIONS) || '[]');
-    const filteredQuestions = seriesQuestions.filter((sq: SeriesQuestion) => sq.seriesId !== id);
-    localStorage.setItem(STORAGE_KEYS.SERIES_QUESTIONS, JSON.stringify(filteredQuestions));
-  },
-
-  addQuestion: async (seriesId: string, data: { questionId: string; orderIndex?: number }): Promise<SeriesQuestion> => {
-    await delay(300);
-    const questions = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUESTIONS) || '[]');
-    const question = questions.find((q: Question) => q.id === data.questionId);
-    
-    if (!question) throw new Error('问题不存在');
-
-    const seriesQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES_QUESTIONS) || '[]');
-    const maxOrder = Math.max(0, ...seriesQuestions.filter((sq: SeriesQuestion) => sq.seriesId === seriesId).map((sq: SeriesQuestion) => sq.orderIndex));
-    
-    const newSeriesQuestion: SeriesQuestion = {
-      id: uuidv4(),
-      seriesId,
-      questionId: data.questionId,
-      orderIndex: data.orderIndex || maxOrder + 1,
-      question
-    };
-
-    seriesQuestions.push(newSeriesQuestion);
-    localStorage.setItem(STORAGE_KEYS.SERIES_QUESTIONS, JSON.stringify(seriesQuestions));
-
-    // 更新系列的问题数量
-    const series = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES) || '[]');
-    const seriesIndex = series.findIndex((s: QuestionSeries) => s.id === seriesId);
-    if (seriesIndex !== -1) {
-      series[seriesIndex].questionCount = seriesQuestions.filter((sq: SeriesQuestion) => sq.seriesId === seriesId).length;
-      localStorage.setItem(STORAGE_KEYS.SERIES, JSON.stringify(series));
-    }
-
-    return newSeriesQuestion;
-  },
-
-  removeQuestion: async (seriesId: string, questionId: string): Promise<void> => {
-    await delay(200);
-    const seriesQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES_QUESTIONS) || '[]');
-    const filtered = seriesQuestions.filter((sq: SeriesQuestion) => !(sq.seriesId === seriesId && sq.question.id === questionId));
-    localStorage.setItem(STORAGE_KEYS.SERIES_QUESTIONS, JSON.stringify(filtered));
-
-    // 更新系列的问题数量
-    const series = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES) || '[]');
-    const seriesIndex = series.findIndex((s: QuestionSeries) => s.id === seriesId);
-    if (seriesIndex !== -1) {
-      series[seriesIndex].questionCount = filtered.filter((sq: SeriesQuestion) => sq.seriesId === seriesId).length;
-      localStorage.setItem(STORAGE_KEYS.SERIES, JSON.stringify(series));
-    }
-  },
-
-  updateQuestion: async (_seriesId: string, seriesQuestionId: string, data: { questionId?: string; orderIndex?: number }): Promise<SeriesQuestion> => {
-    await delay(300);
-    const seriesQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.SERIES_QUESTIONS) || '[]');
-    const index = seriesQuestions.findIndex((sq: SeriesQuestion) => sq.id === seriesQuestionId);
-    
-    if (index === -1) throw new Error('系列问题不存在');
-
-    if (data.questionId) {
-      const questions = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUESTIONS) || '[]');
-      const question = questions.find((q: Question) => q.id === data.questionId);
-      if (!question) throw new Error('问题不存在');
-      seriesQuestions[index].question = question;
-      seriesQuestions[index].questionId = data.questionId;
-    }
-
-    if (data.orderIndex) {
-      seriesQuestions[index].orderIndex = data.orderIndex;
-    }
-
-    localStorage.setItem(STORAGE_KEYS.SERIES_QUESTIONS, JSON.stringify(seriesQuestions));
-    return seriesQuestions[index];
-  }
-};
 
 export const localAdminAPI = {
   createQuestion: async (data: { title: string; description?: string; category?: string }): Promise<Question> => {

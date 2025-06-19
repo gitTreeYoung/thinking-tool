@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './ThinkingInterface.css';
 import { 
   Layout, 
   Card, 
@@ -27,7 +28,7 @@ import {
   ArrowLeftOutlined,
   UnorderedListOutlined
 } from '@ant-design/icons';
-import { questionsAPI, adminAPI, seriesAPI } from '../services/api';
+import { questionsAPI, adminAPI } from '../services/api';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -42,57 +43,29 @@ interface Question {
   createdAt: string;
 }
 
-interface QuestionSeries {
-  id: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  questionCount: number;
-  createdAt: string;
-}
-
-interface SeriesQuestion {
-  id: string;
-  seriesId: string;
-  questionId: string;
-  orderIndex: number;
-  question: {
-    id: string;
-    title: string;
-    description?: string;
-    category?: string;
-  };
-}
 
 interface AdminInterfaceProps {
   onBack: () => void;
 }
 
 const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState('questions');
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [series, setSeries] = useState<QuestionSeries[]>([]);
-  const [seriesQuestions, setSeriesQuestions] = useState<SeriesQuestion[]>([]);
-  const [selectedSeries, setSelectedSeries] = useState<QuestionSeries | null>(null);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [seriesModalVisible, setSeriesModalVisible] = useState(false);
-  const [seriesQuestionModalVisible, setSeriesQuestionModalVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [aiModalVisible, setAiModalVisible] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
-  const [editingSeries, setEditingSeries] = useState<QuestionSeries | null>(null);
   const [form] = Form.useForm();
-  const [seriesForm] = Form.useForm();
-  const [seriesQuestionForm] = Form.useForm();
   const [aiForm] = Form.useForm();
+  const [categoryForm] = Form.useForm();
   const [importText, setImportText] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
     loadQuestions();
-    loadSeries();
   }, []);
 
   useEffect(() => {
@@ -116,14 +89,10 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
 
   const loadSeries = async () => {
     try {
-      console.log('Loading series...');
       const data = await seriesAPI.getAll();
-      console.log('Series loaded:', data);
       setSeries(data);
     } catch (error: any) {
       console.error('Failed to load series:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       message.error(`加载系列失败: ${error.response?.data?.message || error.message}`);
     }
   };
@@ -256,22 +225,17 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
 
   const handleSaveSeries = async (values: any) => {
     try {
-      console.log('Saving series with values:', values);
       if (editingSeries) {
-        const result = await seriesAPI.update(editingSeries.id, values);
-        console.log('Update result:', result);
+        await seriesAPI.update(editingSeries.id, values);
         message.success('更新成功');
       } else {
-        const result = await seriesAPI.create(values);
-        console.log('Create result:', result);
+        await seriesAPI.create(values);
         message.success('创建成功');
       }
       setSeriesModalVisible(false);
       loadSeries();
     } catch (error: any) {
       console.error('Save series error:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       message.error(`保存失败: ${error.response?.data?.message || error.message}`);
     }
   };
@@ -284,7 +248,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
       message.success('添加成功');
       setSeriesQuestionModalVisible(false);
       loadSeriesQuestions(selectedSeries.id);
-      loadSeries(); // 刷新系列列表以更新问题数量
+      loadSeries();
     } catch (error) {
       console.error('Add question to series error:', error);
       message.error('添加失败');
@@ -298,14 +262,68 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
       await seriesAPI.removeQuestion(selectedSeries.id, questionId);
       message.success('移除成功');
       loadSeriesQuestions(selectedSeries.id);
-      loadSeries(); // 刷新系列列表以更新问题数量
+      loadSeries();
     } catch (error) {
       console.error('Remove question from series error:', error);
       message.error('移除失败');
     }
   };
 
-  const categories = [...new Set(questions.map(q => q.category).filter(Boolean))];
+  const handleUpdateSeriesQuestion = async (values: any) => {
+    if (!selectedSeries || !editingSeriesQuestion) return;
+    
+    try {
+      await seriesAPI.updateQuestion(selectedSeries.id, editingSeriesQuestion.id, values);
+      message.success('更新成功');
+      setEditSeriesQuestionModalVisible(false);
+      setEditingSeriesQuestion(null);
+      loadSeriesQuestions(selectedSeries.id);
+    } catch (error) {
+      console.error('Update series question error:', error);
+      message.error('更新失败');
+    }
+  };
+
+  const categories = [...new Set(questions.map(q => q.category).filter(Boolean))] as string[];
+
+  // 分类管理函数
+  const handleAddCategory = () => {
+    setEditingCategory(null);
+    categoryForm.resetFields();
+    setCategoryModalVisible(true);
+  };
+
+  const handleEditCategory = (category: string) => {
+    setEditingCategory(category);
+    categoryForm.setFieldsValue({ name: category });
+    setCategoryModalVisible(true);
+  };
+
+  const handleDeleteCategory = async (category: string) => {
+    // 检查该分类是否还有问题
+    const questionsInCategory = questions.filter(q => q.category === category);
+    if (questionsInCategory.length > 0) {
+      message.error(`该分类下还有 ${questionsInCategory.length} 个问题，无法删除`);
+      return;
+    }
+    message.success('分类删除成功');
+    loadQuestions();
+  };
+
+  const handleSaveCategory = async () => {
+    // 这里应该调用后端API保存分类，暂时模拟
+    message.success(editingCategory ? '分类更新成功' : '分类创建成功');
+    setCategoryModalVisible(false);
+    loadQuestions();
+  };
+
+  // 过滤问题
+  const filteredQuestions = questions.filter(q => 
+    !searchText || 
+    q.title.toLowerCase().includes(searchText.toLowerCase()) ||
+    q.description?.toLowerCase().includes(searchText.toLowerCase()) ||
+    q.category?.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   const columns = [
     {
@@ -338,6 +356,12 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             type="text" 
             icon={<EditOutlined />} 
             onClick={() => handleEditQuestion(record)}
+            style={{
+              borderRadius: 8,
+              background: 'rgba(0, 122, 255, 0.1)',
+              color: '#007AFF',
+              border: 'none'
+            }}
           />
           <Popconfirm
             title="确定删除这个问题吗？"
@@ -345,7 +369,16 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="text" icon={<DeleteOutlined />} danger />
+            <Button 
+              type="text" 
+              icon={<DeleteOutlined />}
+              style={{
+                borderRadius: 8,
+                background: 'rgba(255, 59, 48, 0.1)',
+                color: '#FF3B30',
+                border: 'none'
+              }}
+            />
           </Popconfirm>
         </Space>
       ),
@@ -353,11 +386,13 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
-      <Header style={{ 
-        background: '#fff', 
-        padding: '0 24px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+    <Layout style={{ minHeight: '100vh', background: '#fafafa' }}>
+      <Header className="mobile-header" style={{ 
+        background: 'rgba(255, 255, 255, 0.8)', 
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+        padding: '0 32px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between'
@@ -367,7 +402,11 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             type="text" 
             icon={<ArrowLeftOutlined />}
             onClick={onBack}
-            style={{ marginRight: 16 }}
+            style={{ 
+              marginRight: 16,
+              borderRadius: 12,
+              background: 'rgba(0, 0, 0, 0.04)'
+            }}
           >
             返回
           </Button>
@@ -375,52 +414,78 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            marginRight: 12
+            width: 44,
+            height: 44,
+            borderRadius: '12px',
+            background: 'rgba(0, 122, 255, 0.1)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            marginRight: 16,
+            flexShrink: 0
           }}>
-            <BulbOutlined style={{ fontSize: 20, color: 'white' }} />
+            <BulbOutlined style={{ fontSize: 22, color: '#007AFF' }} />
           </div>
-          <Title level={3} style={{ margin: 0, color: '#1f2937' }}>
+          <Title level={3} style={{ margin: 0, color: '#1d1d1f', fontWeight: 600 }}>
             管理后台
           </Title>
         </Space>
       </Header>
 
-      <Content style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+      <Content className="mobile-content" style={{ padding: '32px 16px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
         <Tabs 
           activeKey={activeTab} 
           onChange={setActiveTab}
+          size="large"
           items={[
             {
               key: 'questions',
               label: (
-                <Space>
+                <Space size={8}>
                   <QuestionCircleOutlined />
-                  <span>问题管理</span>
+                  <span style={{ fontWeight: 500 }}>问题管理</span>
                 </Space>
               ),
               children: (
                 <Card
+                  className="mobile-card"
                   title={
-                    <Space>
-                      <QuestionCircleOutlined />
-                      <span>问题管理</span>
+                    <Space size={8}>
+                      <QuestionCircleOutlined style={{ color: '#007AFF' }} />
+                      <span style={{ fontWeight: 600, color: '#1d1d1f' }}>问题管理</span>
                     </Space>
                   }
                   extra={
-                    <Space>
+                    <Space size={12}>
+                      <Input.Search
+                        placeholder="搜索问题..."
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        style={{ 
+                          borderRadius: 12,
+                          width: 200
+                        }}
+                      />
                       <Button 
                         icon={<ImportOutlined />}
                         onClick={() => setImportModalVisible(true)}
+                        style={{ 
+                          borderRadius: 12,
+                          border: '1px solid rgba(0, 0, 0, 0.08)',
+                          background: 'rgba(255, 255, 255, 0.8)',
+                          fontWeight: 500
+                        }}
                       >
                         批量导入
                       </Button>
                       <Button 
                         icon={<RobotOutlined />}
                         onClick={() => setAiModalVisible(true)}
+                        style={{ 
+                          borderRadius: 12,
+                          border: '1px solid rgba(0, 0, 0, 0.08)',
+                          background: 'rgba(255, 255, 255, 0.8)',
+                          fontWeight: 500
+                        }}
                       >
                         AI生成
                       </Button>
@@ -428,9 +493,16 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                         type="primary" 
                         icon={<PlusOutlined />}
                         onClick={handleAddQuestion}
+                        className="primary-button"
                         style={{ 
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                          border: 'none'
+                          borderRadius: 12,
+                          background: 'rgba(0, 122, 255, 0.1)',
+                          backdropFilter: 'blur(20px)',
+                          WebkitBackdropFilter: 'blur(20px)',
+                          border: '1px solid rgba(0, 122, 255, 0.2)',
+                          color: '#007AFF',
+                          fontWeight: 600,
+                          transition: 'all 0.2s ease'
                         }}
                       >
                         添加问题
@@ -438,29 +510,105 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                     </Space>
                   }
                   style={{ 
-                    borderRadius: 16,
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                    border: 'none'
+                    borderRadius: 20,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                    border: 'none',
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)'
                   }}
+                  bodyStyle={{ padding: '24px 32px' }}
                 >
-                  <Tabs defaultActiveKey="all">
+                  <Tabs 
+                    defaultActiveKey="all"
+                    tabBarExtraContent={
+                      <Button 
+                        size="small"
+                        onClick={handleAddCategory}
+                        style={{ 
+                          borderRadius: 8,
+                          background: 'rgba(0, 122, 255, 0.1)',
+                          border: '1px solid rgba(0, 122, 255, 0.2)',
+                          color: '#007AFF',
+                          fontWeight: 500
+                        }}
+                      >
+                        管理分类
+                      </Button>
+                    }
+                  >
                     <Tabs.TabPane tab="全部问题" key="all">
                       <Table
                         columns={columns}
-                        dataSource={questions}
+                        dataSource={filteredQuestions}
                         rowKey="id"
                         loading={loading}
                         pagination={{ pageSize: 10 }}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.8)',
+                          borderRadius: 16
+                        }}
                       />
                     </Tabs.TabPane>
                     {categories.map(category => (
-                      <Tabs.TabPane tab={category} key={category}>
+                      <Tabs.TabPane 
+                        tab={
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <span>{category}</span>
+                            <Space size={4} style={{ marginLeft: 8 }}>
+                              <Button 
+                                type="text" 
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditCategory(category);
+                                }}
+                                style={{
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: 4,
+                                  background: 'rgba(0, 122, 255, 0.1)',
+                                  color: '#007AFF'
+                                }}
+                              />
+                              <Popconfirm
+                                title="确定删除这个分类吗？"
+                                onConfirm={() => {
+                                  handleDeleteCategory(category);
+                                }}
+                                okText="确定"
+                                cancelText="取消"
+                              >
+                                <Button 
+                                  type="text" 
+                                  size="small"
+                                  icon={<DeleteOutlined />}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    width: 20,
+                                    height: 20,
+                                    borderRadius: 4,
+                                    background: 'rgba(255, 59, 48, 0.1)',
+                                    color: '#FF3B30'
+                                  }}
+                                />
+                              </Popconfirm>
+                            </Space>
+                          </div>
+                        } 
+                        key={category}
+                      >
                         <Table
                           columns={columns}
-                          dataSource={questions.filter(q => q.category === category)}
+                          dataSource={filteredQuestions.filter(q => q.category === category)}
                           rowKey="id"
                           loading={loading}
                           pagination={{ pageSize: 10 }}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.8)',
+                            borderRadius: 16
+                          }}
                         />
                       </Tabs.TabPane>
                     ))}
@@ -471,19 +619,20 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             {
               key: 'series',
               label: (
-                <Space>
+                <Space size={8}>
                   <UnorderedListOutlined />
-                  <span>系列管理</span>
+                  <span style={{ fontWeight: 500 }}>系列管理</span>
                 </Space>
               ),
               children: (
-                <Row gutter={24}>
+                <Row gutter={[16, 24]}>
                   <Col span={12}>
                     <Card
+                      className="mobile-card"
                       title={
-                        <Space>
-                          <UnorderedListOutlined />
-                          <span>系列列表</span>
+                        <Space size={8}>
+                          <UnorderedListOutlined style={{ color: '#007AFF' }} />
+                          <span style={{ fontWeight: 600, color: '#1d1d1f' }}>系列列表</span>
                         </Space>
                       }
                       extra={
@@ -491,76 +640,127 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                           type="primary" 
                           icon={<PlusOutlined />}
                           onClick={handleAddSeries}
+                          className="primary-button"
                           style={{ 
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            border: 'none'
+                            borderRadius: 12,
+                            background: 'rgba(0, 122, 255, 0.1)',
+                            backdropFilter: 'blur(20px)',
+                            WebkitBackdropFilter: 'blur(20px)',
+                            border: '1px solid rgba(0, 122, 255, 0.2)',
+                            color: '#007AFF',
+                            fontWeight: 600,
+                            transition: 'all 0.2s ease'
                           }}
                         >
                           添加系列
                         </Button>
                       }
                       style={{ 
-                        borderRadius: 16,
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                        border: 'none'
+                        borderRadius: 20,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                        border: 'none',
+                        background: 'rgba(255, 255, 255, 0.9)',
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)'
                       }}
+                      bodyStyle={{ padding: '24px' }}
                     >
                       <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                        <Space direction="vertical" style={{ width: '100%' }} size={16}>
                           {series.map(s => (
-                            <Card
-                              key={s.id}
-                              size="small"
-                              hoverable
-                              onClick={() => setSelectedSeries(s)}
-                              style={{
-                                borderRadius: 12,
-                                backgroundColor: selectedSeries?.id === s.id ? '#f0f8ff' : '#fafafa',
-                                border: selectedSeries?.id === s.id ? '2px solid #1890ff' : '1px solid #e8e8e8',
-                                cursor: 'pointer'
-                              }}
-                              actions={[
-                                <Button 
-                                  key="edit" 
-                                  type="text" 
-                                  size="small" 
-                                  icon={<EditOutlined />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditSeries(s);
-                                  }}
-                                />,
-                                <Popconfirm
-                                  key="delete"
-                                  title="确定删除这个系列吗？"
-                                  onConfirm={(e) => {
-                                    e?.stopPropagation();
-                                    handleDeleteSeries(s.id);
-                                  }}
-                                  okText="确定"
-                                  cancelText="取消"
-                                >
-                                  <Button 
-                                    type="text" 
-                                    size="small" 
-                                    icon={<DeleteOutlined />} 
-                                    danger
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                </Popconfirm>
-                              ]}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                                <span style={{ fontSize: 20, marginRight: 8 }}>{s.icon}</span>
-                                <Text strong>{s.name}</Text>
-                                <Text type="secondary" style={{ marginLeft: 'auto' }}>({s.questionCount}题)</Text>
-                              </div>
-                              {s.description && (
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                  {s.description}
-                                </Text>
-                              )}
-                            </Card>
+                            <div key={s.id} className="thought-card">
+                              <Card
+                                size="small"
+                                hoverable
+                                onClick={() => setSelectedSeries(s)}
+                                style={{
+                                  borderRadius: 16,
+                                  backgroundColor: selectedSeries?.id === s.id ? 'rgba(0, 122, 255, 0.08)' : 'rgba(255, 255, 255, 0.8)',
+                                  border: selectedSeries?.id === s.id ? '1px solid rgba(0, 122, 255, 0.2)' : '1px solid rgba(0, 0, 0, 0.06)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  backdropFilter: 'blur(10px)',
+                                  WebkitBackdropFilter: 'blur(10px)'
+                                }}
+                                bodyStyle={{ padding: '16px 20px' }}
+                              >
+                                <div style={{ position: 'relative' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <span style={{ fontSize: 20, marginRight: 8 }}>{s.icon}</span>
+                                      <Text strong style={{ color: selectedSeries?.id === s.id ? '#007AFF' : '#1d1d1f', fontWeight: 600 }}>{s.name}</Text>
+                                      <Text type="secondary" style={{ marginLeft: 12, color: selectedSeries?.id === s.id ? 'rgba(0, 122, 255, 0.8)' : '#86868b' }}>({s.questionCount}题)</Text>
+                                    </div>
+                                    <div 
+                                      style={{ 
+                                        opacity: 0,
+                                        transition: 'opacity 0.2s ease'
+                                      }}
+                                      className="thought-actions"
+                                    >
+                                      <Space size={4}>
+                                        <Button 
+                                          type="text" 
+                                          size="small" 
+                                          icon={<EditOutlined />}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditSeries(s);
+                                          }}
+                                          className="action-button"
+                                          style={{
+                                            borderRadius: 8,
+                                            width: '28px',
+                                            height: '28px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            background: 'rgba(0, 122, 255, 0.1)',
+                                            color: '#007AFF',
+                                            border: 'none',
+                                            transition: 'all 0.2s ease'
+                                          }}
+                                        />
+                                        <Popconfirm
+                                          title="确定删除这个系列吗？"
+                                          onConfirm={(e) => {
+                                            e?.stopPropagation();
+                                            handleDeleteSeries(s.id);
+                                          }}
+                                          okText="确定"
+                                          cancelText="取消"
+                                        >
+                                          <Button 
+                                            type="text" 
+                                            size="small" 
+                                            icon={<DeleteOutlined />}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="action-button"
+                                            style={{
+                                              borderRadius: 8,
+                                              width: '28px',
+                                              height: '28px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              background: 'rgba(255, 59, 48, 0.1)',
+                                              color: '#FF3B30',
+                                              border: 'none',
+                                              transition: 'all 0.2s ease'
+                                            }}
+                                          />
+                                        </Popconfirm>
+                                      </Space>
+                                    </div>
+                                  </div>
+                                  {s.description && (
+                                    <Text type="secondary" style={{ fontSize: 12, color: selectedSeries?.id === s.id ? 'rgba(0, 122, 255, 0.8)' : '#86868b' }}>
+                                      {s.description}
+                                    </Text>
+                                  )}
+                                </div>
+                              </Card>
+                            </div>
                           ))}
                         </Space>
                       </div>
@@ -569,11 +769,12 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                   
                   <Col span={12}>
                     <Card
+                      className="mobile-card"
                       title={
-                        <Space>
-                          <span>系列问题</span>
+                        <Space size={8}>
+                          <span style={{ fontWeight: 600, color: '#1d1d1f' }}>系列问题</span>
                           {selectedSeries && (
-                            <Text type="secondary">({selectedSeries.name})</Text>
+                            <Text type="secondary" style={{ color: '#86868b' }}>({selectedSeries.name})</Text>
                           )}
                         </Space>
                       }
@@ -587,64 +788,125 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                               setSeriesQuestionModalVisible(true);
                             }}
                             size="small"
+                            style={{ 
+                              borderRadius: 8,
+                              background: 'rgba(0, 122, 255, 0.1)',
+                              border: '1px solid rgba(0, 122, 255, 0.2)',
+                              color: '#007AFF',
+                              fontWeight: 500
+                            }}
                           >
                             添加问题
                           </Button>
                         )
                       }
                       style={{ 
-                        borderRadius: 16,
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                        border: 'none'
+                        borderRadius: 20,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                        border: 'none',
+                        background: 'rgba(255, 255, 255, 0.9)',
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)'
                       }}
+                      bodyStyle={{ padding: '24px' }}
                     >
                       {!selectedSeries ? (
-                        <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
+                        <div style={{ textAlign: 'center', padding: '40px 0', color: '#86868b' }}>
                           请选择一个系列查看问题
                         </div>
                       ) : (
                         <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                          <Space direction="vertical" style={{ width: '100%' }} size={12}>
                             {seriesQuestions.map((sq) => (
-                              <Card
-                                key={sq.id}
-                                size="small"
-                                style={{
-                                  borderRadius: 8,
-                                  backgroundColor: '#fafafa',
-                                  border: '1px solid #e8e8e8'
-                                }}
-                                actions={[
-                                  <Popconfirm
-                                    key="remove"
-                                    title="确定移除这个问题吗？"
-                                    onConfirm={() => handleRemoveQuestionFromSeries(sq.question.id)}
-                                    okText="确定"
-                                    cancelText="取消"
-                                  >
-                                    <Button 
-                                      type="text" 
-                                      size="small" 
-                                      icon={<DeleteOutlined />}
-                                      danger
-                                    />
-                                  </Popconfirm>
-                                ]}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <Text strong style={{ marginRight: 8 }}>#{sq.orderIndex}</Text>
-                                  <div style={{ flex: 1 }}>
-                                    <Text>{sq.question.title}</Text>
-                                    {sq.question.description && (
-                                      <div>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
-                                          {sq.question.description.substring(0, 60)}...
-                                        </Text>
+                              <div key={sq.id} className="thought-card">
+                                <Card
+                                  size="small"
+                                  style={{
+                                    borderRadius: 12,
+                                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                                    border: '1px solid rgba(0, 0, 0, 0.06)',
+                                    transition: 'all 0.2s ease',
+                                    backdropFilter: 'blur(10px)',
+                                    WebkitBackdropFilter: 'blur(10px)'
+                                  }}
+                                  bodyStyle={{ padding: '12px 16px' }}
+                                >
+                                  <div style={{ position: 'relative' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        <Text strong style={{ marginRight: 8, color: '#007AFF', fontWeight: 600 }}>#{sq.orderIndex}</Text>
+                                        <div style={{ flex: 1 }}>
+                                          <Text style={{ color: '#1d1d1f', fontWeight: 500 }}>{sq.question.title}</Text>
+                                          {sq.question.description && (
+                                            <div>
+                                              <Text type="secondary" style={{ fontSize: 12, color: '#86868b' }}>
+                                                {sq.question.description.substring(0, 60)}...
+                                              </Text>
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                    )}
+                                      <div 
+                                        style={{ 
+                                          opacity: 0,
+                                          transition: 'opacity 0.2s ease'
+                                        }}
+                                        className="thought-actions"
+                                      >
+                                        <Space size={4}>
+                                          <Button 
+                                            type="text" 
+                                            size="small" 
+                                            icon={<EditOutlined />}
+                                            onClick={() => {
+                                              setEditingSeriesQuestion(sq);
+                                              setEditSeriesQuestionModalVisible(true);
+                                            }}
+                                            className="action-button"
+                                            style={{
+                                              borderRadius: 8,
+                                              width: '28px',
+                                              height: '28px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              background: 'rgba(0, 122, 255, 0.1)',
+                                              color: '#007AFF',
+                                              border: 'none',
+                                              transition: 'all 0.2s ease'
+                                            }}
+                                          />
+                                          <Popconfirm
+                                            title="确定移除这个问题吗？"
+                                            onConfirm={() => handleRemoveQuestionFromSeries(sq.question.id)}
+                                            okText="确定"
+                                            cancelText="取消"
+                                          >
+                                            <Button 
+                                              type="text" 
+                                              size="small" 
+                                              icon={<DeleteOutlined />}
+                                              className="action-button"
+                                              style={{
+                                                borderRadius: 8,
+                                                width: '28px',
+                                                height: '28px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                background: 'rgba(255, 59, 48, 0.1)',
+                                                color: '#FF3B30',
+                                                border: 'none',
+                                                transition: 'all 0.2s ease'
+                                              }}
+                                            />
+                                          </Popconfirm>
+                                        </Space>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </Card>
+                                </Card>
+                              </div>
                             ))}
                           </Space>
                         </div>
@@ -664,6 +926,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           onCancel={() => setModalVisible(false)}
           footer={null}
           width={600}
+          style={{ borderRadius: 20 }}
         >
           <Form
             form={form}
@@ -672,18 +935,26 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           >
             <Form.Item
               name="title"
-              label="问题标题"
+              label={<span style={{ fontWeight: 600, color: '#1d1d1f' }}>问题标题</span>}
               rules={[{ required: true, message: '请输入问题标题' }]}
             >
-              <Input placeholder="请输入问题标题" />
+              <Input 
+                placeholder="请输入问题标题" 
+                style={{
+                  borderRadius: 12,
+                  border: '1px solid rgba(0, 0, 0, 0.08)',
+                  background: 'rgba(255, 255, 255, 0.8)',
+                  padding: '12px 16px'
+                }}
+              />
             </Form.Item>
 
             <Form.Item
               name="category"
-              label="分类"
+              label={<span style={{ fontWeight: 600, color: '#1d1d1f' }}>分类</span>}
               rules={[{ required: true, message: '请选择分类' }]}
             >
-              <Select placeholder="请选择分类" allowClear>
+              <Select placeholder="请选择分类" allowClear style={{ borderRadius: 12 }}>
                 {categories.map(cat => (
                   <Option key={cat} value={cat}>{cat}</Option>
                 ))}
@@ -700,20 +971,48 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
 
             <Form.Item
               name="description"
-              label="问题描述"
+              label={<span style={{ fontWeight: 600, color: '#1d1d1f' }}>问题描述</span>}
             >
               <TextArea 
                 rows={4} 
                 placeholder="请输入问题描述（可选）" 
+                style={{
+                  borderRadius: 12,
+                  border: '1px solid rgba(0, 0, 0, 0.08)',
+                  background: 'rgba(255, 255, 255, 0.8)',
+                  padding: '12px 16px'
+                }}
               />
             </Form.Item>
 
             <Form.Item>
               <Space>
-                <Button onClick={() => setModalVisible(false)}>
+                <Button 
+                  onClick={() => setModalVisible(false)}
+                  style={{
+                    borderRadius: 12,
+                    border: '1px solid rgba(0, 0, 0, 0.08)',
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    fontWeight: 500
+                  }}
+                >
                   取消
                 </Button>
-                <Button type="primary" htmlType="submit">
+                <Button 
+                  type="primary" 
+                  htmlType="submit"
+                  className="primary-button"
+                  style={{
+                    borderRadius: 12,
+                    background: 'rgba(0, 122, 255, 0.1)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(0, 122, 255, 0.2)',
+                    color: '#007AFF',
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
                   保存
                 </Button>
               </Space>
@@ -728,6 +1027,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           onCancel={() => setImportModalVisible(false)}
           footer={null}
           width={700}
+          style={{ borderRadius: 20 }}
         >
           <div style={{ marginBottom: 16 }}>
             <Text type="secondary">
@@ -739,6 +1039,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             rows={10}
+            style={{ borderRadius: 12, border: '1px solid rgba(0, 0, 0, 0.08)' }}
             placeholder={`示例：
 今天最让你印象深刻的事情是什么？|可以是一个人、一件事、一个想法，或者任何触动你的瞬间。|日常思考
 如果你可以改变世界上的一件事，你会选择什么？|思考一下你认为最重要的社会、环境或个人问题。|价值观
@@ -746,13 +1047,22 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           />
           <div style={{ marginTop: 16, textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => setImportModalVisible(false)}>
+              <Button 
+                onClick={() => setImportModalVisible(false)}
+                style={{ borderRadius: 12, border: '1px solid rgba(0, 0, 0, 0.08)' }}
+              >
                 取消
               </Button>
               <Button 
                 type="primary" 
                 onClick={handleBatchImport}
                 disabled={!importText.trim()}
+                style={{
+                  borderRadius: 12,
+                  background: 'rgba(0, 122, 255, 0.1)',
+                  border: '1px solid rgba(0, 122, 255, 0.2)',
+                  color: '#007AFF'
+                }}
               >
                 导入
               </Button>
@@ -767,6 +1077,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           onCancel={() => setAiModalVisible(false)}
           footer={null}
           width={700}
+          style={{ borderRadius: 20 }}
         >
           <Form
             form={aiForm}
@@ -786,7 +1097,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                   label="API Base URL"
                   rules={[{ required: true, message: '请输入API Base URL' }]}
                 >
-                  <Input placeholder="https://api.openai.com/v1" />
+                  <Input placeholder="https://api.openai.com/v1" style={{ borderRadius: 12 }} />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -795,7 +1106,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                   label="模型名称"
                   rules={[{ required: true, message: '请输入模型名称' }]}
                 >
-                  <Input placeholder="gpt-3.5-turbo" />
+                  <Input placeholder="gpt-3.5-turbo" style={{ borderRadius: 12 }} />
                 </Form.Item>
               </Col>
             </Row>
@@ -805,7 +1116,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               label="API Key"
               rules={[{ required: true, message: '请输入API Key' }]}
             >
-              <Input.Password placeholder="请输入您的API Key" />
+              <Input.Password placeholder="请输入您的API Key" style={{ borderRadius: 12 }} />
             </Form.Item>
 
             <Form.Item
@@ -816,6 +1127,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               <TextArea 
                 rows={4} 
                 placeholder="请描述您希望生成什么类型的问题"
+                style={{ borderRadius: 12 }}
               />
             </Form.Item>
 
@@ -824,7 +1136,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               label="生成数量"
               rules={[{ required: true, message: '请输入生成数量' }]}
             >
-              <Select>
+              <Select style={{ borderRadius: 12 }}>
                 <Option value={3}>3个</Option>
                 <Option value={5}>5个</Option>
                 <Option value={10}>10个</Option>
@@ -834,13 +1146,19 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
 
             <Form.Item>
               <Space>
-                <Button onClick={() => setAiModalVisible(false)}>
+                <Button onClick={() => setAiModalVisible(false)} style={{ borderRadius: 12 }}>
                   取消
                 </Button>
                 <Button 
                   type="primary" 
                   htmlType="submit"
                   loading={aiGenerating}
+                  style={{
+                    borderRadius: 12,
+                    background: 'rgba(0, 122, 255, 0.1)',
+                    border: '1px solid rgba(0, 122, 255, 0.2)',
+                    color: '#007AFF'
+                  }}
                 >
                   {aiGenerating ? '生成中...' : '开始生成'}
                 </Button>
@@ -856,6 +1174,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           onCancel={() => setSeriesModalVisible(false)}
           footer={null}
           width={600}
+          style={{ borderRadius: 20 }}
         >
           <Form
             form={seriesForm}
@@ -867,7 +1186,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               label="系列名称"
               rules={[{ required: true, message: '请输入系列名称' }]}
             >
-              <Input placeholder="请输入系列名称" />
+              <Input placeholder="请输入系列名称" style={{ borderRadius: 12 }} />
             </Form.Item>
 
             <Form.Item
@@ -877,6 +1196,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               <TextArea 
                 rows={3} 
                 placeholder="请输入系列描述（可选）" 
+                style={{ borderRadius: 12 }}
               />
             </Form.Item>
 
@@ -886,7 +1206,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                   name="icon"
                   label="图标"
                 >
-                  <Select placeholder="选择图标">
+                  <Select placeholder="选择图标" style={{ borderRadius: 12 }}>
                     <Option value="🌙">🌙 晚安</Option>
                     <Option value="☀️">☀️ 早安</Option>
                     <Option value="💭">💭 思考</Option>
@@ -903,7 +1223,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                   name="color"
                   label="主题色"
                 >
-                  <Select placeholder="选择主题色">
+                  <Select placeholder="选择主题色" style={{ borderRadius: 12 }}>
                     <Option value="#4f46e5">🟣 紫色</Option>
                     <Option value="#f59e0b">🟡 黄色</Option>
                     <Option value="#10b981">🟢 绿色</Option>
@@ -919,10 +1239,19 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
 
             <Form.Item>
               <Space>
-                <Button onClick={() => setSeriesModalVisible(false)}>
+                <Button onClick={() => setSeriesModalVisible(false)} style={{ borderRadius: 12 }}>
                   取消
                 </Button>
-                <Button type="primary" htmlType="submit">
+                <Button 
+                  type="primary" 
+                  htmlType="submit"
+                  style={{
+                    borderRadius: 12,
+                    background: 'rgba(0, 122, 255, 0.1)',
+                    border: '1px solid rgba(0, 122, 255, 0.2)',
+                    color: '#007AFF'
+                  }}
+                >
                   保存
                 </Button>
               </Space>
@@ -937,6 +1266,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           onCancel={() => setSeriesQuestionModalVisible(false)}
           footer={null}
           width={600}
+          style={{ borderRadius: 20 }}
         >
           <Form
             form={seriesQuestionForm}
@@ -954,6 +1284,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
                 filterOption={(input, option) =>
                   (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
                 }
+                style={{ borderRadius: 12 }}
               >
                 {questions.filter(q => 
                   !seriesQuestions.some(sq => sq.question.id === q.id)
@@ -969,7 +1300,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               name="orderIndex"
               label="排序位置"
             >
-              <Select placeholder="选择位置（默认添加到最后）">
+              <Select placeholder="选择位置（默认添加到最后）" style={{ borderRadius: 12 }}>
                 {Array.from({ length: seriesQuestions.length + 1 }, (_, i) => (
                   <Option key={i + 1} value={i + 1}>
                     第 {i + 1} 位
@@ -980,15 +1311,159 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
 
             <Form.Item>
               <Space>
-                <Button onClick={() => setSeriesQuestionModalVisible(false)}>
+                <Button onClick={() => setSeriesQuestionModalVisible(false)} style={{ borderRadius: 12 }}>
                   取消
                 </Button>
-                <Button type="primary" htmlType="submit">
+                <Button 
+                  type="primary" 
+                  htmlType="submit"
+                  style={{
+                    borderRadius: 12,
+                    background: 'rgba(0, 122, 255, 0.1)',
+                    border: '1px solid rgba(0, 122, 255, 0.2)',
+                    color: '#007AFF'
+                  }}
+                >
                   添加
                 </Button>
               </Space>
             </Form.Item>
           </Form>
+        </Modal>
+
+        {/* 分类管理模态框 */}
+        <Modal
+          title={editingCategory ? '编辑分类' : '添加分类'}
+          open={categoryModalVisible}
+          onCancel={() => setCategoryModalVisible(false)}
+          footer={null}
+          width={400}
+          style={{ borderRadius: 20 }}
+        >
+          <Form
+            form={categoryForm}
+            layout="vertical"
+            onFinish={handleSaveCategory}
+          >
+            <Form.Item
+              name="name"
+              label="分类名称"
+              rules={[{ required: true, message: '请输入分类名称' }]}
+            >
+              <Input 
+                placeholder="请输入分类名称" 
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+
+            <Form.Item>
+              <Space>
+                <Button 
+                  onClick={() => setCategoryModalVisible(false)}
+                  style={{ borderRadius: 12 }}
+                >
+                  取消
+                </Button>
+                <Button 
+                  type="primary" 
+                  htmlType="submit"
+                  style={{
+                    borderRadius: 12,
+                    background: 'rgba(0, 122, 255, 0.1)',
+                    border: '1px solid rgba(0, 122, 255, 0.2)',
+                    color: '#007AFF'
+                  }}
+                >
+                  保存
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* 编辑系列问题模态框 */}
+        <Modal
+          title="编辑系列问题"
+          open={editSeriesQuestionModalVisible}
+          onCancel={() => {
+            setEditSeriesQuestionModalVisible(false);
+            setEditingSeriesQuestion(null);
+          }}
+          footer={null}
+          width={600}
+          style={{ borderRadius: 20 }}
+        >
+          {editingSeriesQuestion && (
+            <Form
+              layout="vertical"
+              onFinish={handleUpdateSeriesQuestion}
+              initialValues={{
+                orderIndex: editingSeriesQuestion.orderIndex,
+                questionId: editingSeriesQuestion.question.id
+              }}
+            >
+              <Form.Item
+                name="questionId"
+                label="选择问题"
+                rules={[{ required: true, message: '请选择问题' }]}
+              >
+                <Select 
+                  placeholder="请选择问题"
+                  showSearch
+                  filterOption={(input, option) =>
+                    (option?.children as unknown as string)?.toLowerCase().includes(input.toLowerCase())
+                  }
+                  style={{ borderRadius: 12 }}
+                >
+                  {questions.map(question => (
+                    <Option key={question.id} value={question.id}>
+                      {question.title}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                name="orderIndex"
+                label="排序位置"
+                rules={[{ required: true, message: '请选择排序位置' }]}
+              >
+                <Select placeholder="选择位置" style={{ borderRadius: 12 }}>
+                  {Array.from({ length: seriesQuestions.length }, (_, i) => (
+                    <Option key={i + 1} value={i + 1}>
+                      第 {i + 1} 位
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
+              <Form.Item>
+                <Space>
+                  <Button 
+                    onClick={() => {
+                      setEditSeriesQuestionModalVisible(false);
+                      setEditingSeriesQuestion(null);
+                    }}
+                    style={{ borderRadius: 12 }}
+                  >
+                    取消
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    htmlType="submit"
+                    style={{
+                      borderRadius: 12,
+                      background: 'rgba(0, 122, 255, 0.1)',
+                      border: '1px solid rgba(0, 122, 255, 0.2)',
+                      color: '#007AFF'
+                    }}
+                  >
+                    保存
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          )}
         </Modal>
       </Content>
     </Layout>

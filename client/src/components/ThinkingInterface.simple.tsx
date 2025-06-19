@@ -12,8 +12,10 @@ import {
   message,
   Row,
   Col,
-  Tabs
+  Select
 } from 'antd';
+import RichTextEditor from './RichTextEditor';
+import MDEditor from '@uiw/react-md-editor';
 import { 
   LeftOutlined, 
   RightOutlined,
@@ -26,13 +28,11 @@ import {
   DeleteOutlined,
   CheckOutlined,
   CloseOutlined,
-  QuestionCircleOutlined,
-  UnorderedListOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  FilterOutlined
 } from '@ant-design/icons';
 import { questionsAPI, thoughtsAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import SeriesThinking from './SeriesThinking';
 
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -60,8 +60,9 @@ interface ThinkingInterfaceProps {
 }
 
 const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin }) => {
-  const [activeTab, setActiveTab] = useState('random');
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('全部');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [thoughts, setThoughts] = useState<ThoughtEntry[]>([]);
   const [currentThought, setCurrentThought] = useState('');
@@ -81,10 +82,69 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
     }
   }, [currentQuestionIndex, questions]);
 
+  // 处理分类变化
+  useEffect(() => {
+    filterQuestionsByCategory();
+  }, [selectedCategory, allQuestions]);
+
+  const filterQuestionsByCategory = () => {
+    if (selectedCategory === '全部') {
+      setQuestions(allQuestions);
+    } else {
+      const filtered = allQuestions.filter(q => q.category === selectedCategory);
+      setQuestions(filtered);
+    }
+    setCurrentQuestionIndex(0);
+  };
+
+  // 获取所有分类
+  const getCategories = () => {
+    const categories = ['全部', ...new Set(allQuestions.map(q => q.category).filter(Boolean))];
+    return categories;
+  };
+
+  // 添加全局快捷键支持
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // 检查是否在输入框中，如果是则不响应快捷键
+      const target = event.target as HTMLElement;
+      const isInInput = target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable;
+      
+      if (isInInput) return;
+
+      // Cmd + ← : 上一个问题
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        previousQuestion();
+        return;
+      }
+
+      // Cmd + → : 下一个问题
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowRight') {
+        event.preventDefault();
+        nextQuestion();
+        return;
+      }
+
+      // Cmd + R : 随机问题
+      if ((event.metaKey || event.ctrlKey) && event.key === 'r') {
+        event.preventDefault();
+        randomQuestion();
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentQuestionIndex, questions.length]);
+
   const loadQuestions = async () => {
     try {
       const data = await questionsAPI.getAll();
-      setQuestions(data);
+      setAllQuestions(data);
+      setQuestions(data); // 默认显示全部问题
     } catch (error) {
       console.error('Failed to load questions:', error);
       message.error('加载问题失败');
@@ -124,6 +184,39 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
       await loadThoughts(questionId);
       setCurrentThought('');
       message.success('思考保存成功');
+    } catch (error) {
+      console.error('Failed to save thought:', error);
+      message.error('保存失败，请重试');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveAndNextThought = async () => {
+    if (!currentThought.trim()) {
+      message.warning('请输入思考内容');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const questionId = questions[currentQuestionIndex].id;
+      
+      const newThought = await thoughtsAPI.create({
+        questionId,
+        content: currentThought,
+      });
+      
+      console.log('Thought saved:', newThought);
+      
+      // 重新加载思考历史
+      await loadThoughts(questionId);
+      setCurrentThought('');
+      
+      // 跳转到下一题
+      nextQuestion();
+      
+      message.success('思考已保存，已跳转到下一题');
     } catch (error) {
       console.error('Failed to save thought:', error);
       message.error('保存失败，请重试');
@@ -286,31 +379,26 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
           }}>
             思考工具
           </Title>
-          <Tabs 
-            activeKey={activeTab} 
-            onChange={setActiveTab}
-            size="large"
-            items={[
-              {
-                key: 'random',
-                label: (
-                  <Space size={6}>
-                    <QuestionCircleOutlined />
-                    <span style={{ fontWeight: 500 }}>随机思考</span>
-                  </Space>
-                )
-              },
-              {
-                key: 'series',
-                label: (
-                  <Space size={6}>
-                    <UnorderedListOutlined />
-                    <span style={{ fontWeight: 500 }}>系列思考</span>
-                  </Space>
-                )
-              }
-            ]}
-          />
+          
+          <Space size={16}>
+            <Space size={8}>
+              <FilterOutlined style={{ color: '#007AFF', fontSize: 16 }} />
+              <Text style={{ fontWeight: 500, color: '#1d1d1f' }}>分类筛选：</Text>
+            </Space>
+            <Select
+              value={selectedCategory}
+              onChange={setSelectedCategory}
+              style={{ 
+                minWidth: 120,
+                borderRadius: 12
+              }}
+              size="middle"
+              options={getCategories().map(category => ({
+                value: category,
+                label: category
+              }))}
+            />
+          </Space>
         </div>
         
         <Space>
@@ -343,10 +431,10 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
         margin: '0 auto', 
         width: '100%'
       }}>
-        {activeTab === 'random' ? (
-          <Row gutter={[16, 24]}>
-            {/* 问题卡片 */}
+        <Row gutter={[16, 24]}>
+            {/* 左侧：问题卡片 + 思考历史卡片 */}
             <Col xs={24} lg={12}>
+              {/* 问题卡片 */}
               <Card
                 className="mobile-card"
                 style={{ 
@@ -433,82 +521,7 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
                 </div>
               </Card>
 
-              {/* 输入区域 */}
-              <Card
-                className="mobile-spacing"
-                title={
-                  <Space size={8}>
-                    <EditOutlined style={{ color: '#007AFF' }} />
-                    <span style={{ fontWeight: 600, color: '#1d1d1f' }}>记录思考</span>
-                  </Space>
-                }
-                extra={
-                  <Space size={12}>
-                    <Button 
-                      icon={<AudioOutlined />}
-                      onClick={startVoiceInput}
-                      style={{ 
-                        borderRadius: 12,
-                        border: '1px solid rgba(0, 0, 0, 0.08)',
-                        background: 'rgba(255, 255, 255, 0.8)',
-                        fontWeight: 500
-                      }}
-                    >
-                      语音输入
-                    </Button>
-                    <Button 
-                      type="primary"
-                      icon={<SaveOutlined />}
-                      onClick={saveThought}
-                      loading={saving}
-                      className="primary-button"
-                      style={{ 
-                        borderRadius: 12,
-                        background: 'rgba(0, 122, 255, 0.1)',
-                        backdropFilter: 'blur(20px)',
-                        WebkitBackdropFilter: 'blur(20px)',
-                        border: '1px solid rgba(0, 122, 255, 0.2)',
-                        color: '#007AFF',
-                        fontWeight: 600,
-                        boxShadow: '0 4px 12px rgba(0, 122, 255, 0.1)',
-                        padding: '8px 20px',
-                        height: 'auto',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      {saving ? '保存中...' : '保存'}
-                    </Button>
-                  </Space>
-                }
-                style={{ 
-                  borderRadius: 20,
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-                  border: 'none',
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)'
-                }}
-                bodyStyle={{ padding: '24px 32px 32px' }}
-              >
-                <TextArea
-                  value={currentThought}
-                  onChange={(e) => setCurrentThought(e.target.value)}
-                  placeholder="在这里记录你的思考..."
-                  rows={8}
-                  style={{ 
-                    borderRadius: 16,
-                    fontSize: 17,
-                    lineHeight: 1.6,
-                    border: '1px solid rgba(0, 0, 0, 0.08)',
-                    background: 'rgba(255, 255, 255, 0.8)',
-                    padding: '16px'
-                  }}
-                />
-              </Card>
-            </Col>
-
-            {/* 思考历史卡片 */}
-            <Col xs={24} lg={12}>
+              {/* 思考历史卡片 */}
               <Card
                 className="mobile-card"
                 title={
@@ -554,16 +567,14 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
                             <div style={{ position: 'relative' }}>
                               {editingThought === thought.id ? (
                                 <>
-                                  <TextArea
+                                  <RichTextEditor
                                     value={editingContent}
-                                    onChange={(e) => setEditingContent(e.target.value)}
-                                    rows={3}
+                                    onChange={setEditingContent}
+                                    onSave={() => saveEditThought(thought.id)}
+                                    placeholder="修改思考内容..."
                                     style={{ 
                                       marginBottom: 12,
-                                      fontSize: 15,
-                                      lineHeight: 1.6,
-                                      borderRadius: 12,
-                                      border: '1px solid rgba(0, 0, 0, 0.08)'
+                                      borderRadius: 12
                                     }}
                                   />
                                   <Space size={8}>
@@ -598,17 +609,21 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
                                 </>
                               ) : (
                                 <>
-                                  <Paragraph 
-                                    style={{ 
-                                      margin: 0, 
-                                      marginBottom: 12,
-                                      fontSize: 15,
-                                      lineHeight: 1.6,
-                                      color: '#1d1d1f'
-                                    }}
-                                  >
-                                    {thought.content}
-                                  </Paragraph>
+                                  <div style={{ 
+                                    margin: 0, 
+                                    marginBottom: 12,
+                                    fontSize: 15,
+                                    lineHeight: 1.6,
+                                    color: '#1d1d1f'
+                                  }}>
+                                    <MDEditor.Markdown 
+                                      source={thought.content} 
+                                      style={{ 
+                                        backgroundColor: 'transparent',
+                                        color: 'inherit'
+                                      }} 
+                                    />
+                                  </div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <Text 
                                       type="secondary" 
@@ -683,10 +698,99 @@ const ThinkingInterface: React.FC<ThinkingInterfaceProps> = ({ onNavigateToAdmin
                 )}
               </Card>
             </Col>
+
+            {/* 右侧：输入区域 */}
+            <Col xs={24} lg={12}>
+              <Card
+                className="mobile-spacing"
+                title={
+                  <Space size={8}>
+                    <EditOutlined style={{ color: '#007AFF' }} />
+                    <span style={{ fontWeight: 600, color: '#1d1d1f' }}>记录思考</span>
+                  </Space>
+                }
+                extra={
+                  <Space size={12}>
+                    <Button 
+                      icon={<AudioOutlined />}
+                      onClick={startVoiceInput}
+                      style={{ 
+                        borderRadius: 12,
+                        border: '1px solid rgba(0, 0, 0, 0.08)',
+                        background: 'rgba(255, 255, 255, 0.8)',
+                        fontWeight: 500
+                      }}
+                    >
+                      语音输入
+                    </Button>
+                    <Button 
+                      type="primary"
+                      icon={<SaveOutlined />}
+                      onClick={saveThought}
+                      loading={saving}
+                      className="primary-button"
+                      style={{ 
+                        borderRadius: 12,
+                        background: 'rgba(0, 122, 255, 0.1)',
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(0, 122, 255, 0.2)',
+                        color: '#007AFF',
+                        fontWeight: 600,
+                        boxShadow: '0 4px 12px rgba(0, 122, 255, 0.1)',
+                        padding: '8px 20px',
+                        height: 'auto',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {saving ? '保存中...' : '保存'}
+                    </Button>
+                  </Space>
+                }
+                style={{ 
+                  borderRadius: 20,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                  border: 'none',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  height: 'fit-content'
+                }}
+                bodyStyle={{ padding: '24px 32px 32px' }}
+              >
+                <RichTextEditor
+                  value={currentThought}
+                  onChange={setCurrentThought}
+                  onSave={saveThought}
+                  onSaveAndNext={saveAndNextThought}
+                  placeholder="在这里记录你的思考..."
+                  autoFocus={true}
+                  style={{ 
+                    borderRadius: 16,
+                    background: 'rgba(255, 255, 255, 0.8)'
+                  }}
+                />
+                
+                {/* 快捷键提示和分类信息 */}
+                <div style={{
+                  marginTop: 16,
+                  padding: '12px 16px',
+                  borderRadius: 12,
+                  background: 'rgba(0, 122, 255, 0.04)',
+                  border: '1px solid rgba(0, 122, 255, 0.1)'
+                }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <Text style={{ fontSize: 12, color: '#1d1d1f', fontWeight: 600 }}>
+                      📂 当前分类：{selectedCategory} ({questions.length} 题)
+                    </Text>
+                  </div>
+                  <Text style={{ fontSize: 12, color: '#86868b', fontWeight: 500 }}>
+                    💡 快捷键：⌘ + ← 上一题  |  ⌘ + → 下一题  |  ⌘ + R 随机
+                  </Text>
+                </div>
+              </Card>
+            </Col>
           </Row>
-        ) : (
-          <SeriesThinking />
-        )}
       </Content>
     </Layout>
   );
