@@ -201,14 +201,14 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
   const handleAIGenerate = async (values: any) => {
     try {
       setAiGenerating(true);
-      await adminAPI.generateQuestionsWithAI(values);
-      message.success('AI生成问题成功');
+      const result = await adminAPI.generateQuestionsWithAI(values);
+      message.success(result.message || 'AI生成问题成功');
       setAiModalVisible(false);
       aiForm.resetFields();
       loadQuestions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to generate questions with AI:', error);
-      message.error('AI生成失败');
+      message.error(error.message || 'AI生成失败，请检查配置参数');
     } finally {
       setAiGenerating(false);
     }
@@ -719,7 +719,18 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
           footer={null}
           width={600}
         >
-          <Form form={aiForm} layout="vertical" onFinish={handleAIGenerate}>
+          <Form form={aiForm} layout="vertical" onFinish={handleAIGenerate} initialValues={{
+            baseUrl: 'https://api.openai.com/v1',
+            modelName: 'gpt-3.5-turbo',
+            count: 10,
+            prompt: '请生成一些关于个人成长和自我反思的深度思考问题，帮助用户更好地了解自己，发现内心的想法和感受。'
+          }}>
+            <div style={{ marginBottom: 16, padding: 12, background: 'rgba(0, 122, 255, 0.04)', borderRadius: 8, border: '1px solid rgba(0, 122, 255, 0.2)' }}>
+              <Text style={{ fontSize: 12, color: '#1d1d1f' }}>
+                💡 支持所有兼容OpenAI格式的API服务，如：OpenAI、Azure OpenAI、Claude、本地部署的模型等
+              </Text>
+            </div>
+            
             <Form.Item
               name="baseUrl"
               label="API Base URL"
@@ -741,7 +752,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               label="模型名称"
               rules={[{ required: true, message: '请输入模型名称' }]}
             >
-              <Input placeholder="例如: gpt-3.5-turbo" style={{ borderRadius: 12 }} />
+              <Input placeholder="例如: gpt-3.5-turbo, gpt-4, claude-3-sonnet" style={{ borderRadius: 12 }} />
             </Form.Item>
             
             <Form.Item
@@ -751,7 +762,7 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
             >
               <TextArea 
                 rows={4} 
-                placeholder="描述你想要生成的问题类型和风格..."
+                placeholder="描述你想要生成的问题类型和风格，例如：关于人际关系的思考问题、适合早晨反思的问题等..."
                 style={{ borderRadius: 12 }}
               />
             </Form.Item>
@@ -760,9 +771,8 @@ const AdminInterface: React.FC<AdminInterfaceProps> = ({ onBack }) => {
               name="count"
               label="生成数量"
               rules={[{ required: true, message: '请输入生成数量' }]}
-              initialValue={10}
             >
-              <Input type="number" min={1} max={50} style={{ borderRadius: 12 }} />
+              <Input type="number" min={1} max={50} placeholder="建议1-20个" style={{ borderRadius: 12 }} />
             </Form.Item>
             
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>

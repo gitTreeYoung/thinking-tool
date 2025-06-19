@@ -637,9 +637,112 @@ export const localAdminAPI = {
     return { message: `成功导入 ${newQuestions.length} 个问题` };
   },
 
-  generateQuestionsWithAI: async () => {
-    await delay(1000);
-    // 模拟AI生成（实际部署时这个功能不可用）
-    throw new Error('AI生成功能在静态部署中不可用');
+  generateQuestionsWithAI: async (params: {
+    baseUrl: string;
+    apiKey: string;
+    modelName: string;
+    prompt: string;
+    count: number;
+  }) => {
+    await delay(500);
+    
+    try {
+      const response = await fetch(`${params.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${params.apiKey}`
+        },
+        body: JSON.stringify({
+          model: params.modelName,
+          messages: [
+            {
+              role: 'system',
+              content: `你是一个专业的思考问题生成器。请生成${params.count}个高质量的思考问题。每个问题应该包含标题、描述和分类。请严格按照以下JSON格式返回，不要包含任何其他文字：
+
+[
+  {
+    "title": "问题标题",
+    "description": "问题描述",
+    "category": "分类名称"
+  }
+]
+
+分类可以选择：日常思考、价值观、生活愿景、学习成长、感恩、人际关系、创造力、早安日记、晚安日记、自我反思等。`
+            },
+            {
+              role: 'user',
+              content: params.prompt
+            }
+          ],
+          temperature: 0.8,
+          max_tokens: 2000
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API请求失败: ${response.status} ${response.statusText} - ${errorData.error?.message || '未知错误'}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      
+      if (!content) {
+        throw new Error('AI返回内容为空');
+      }
+
+      // 尝试解析JSON
+      let questions;
+      try {
+        // 清理可能的markdown格式
+        const jsonContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        questions = JSON.parse(jsonContent);
+      } catch (parseError) {
+        console.error('JSON解析失败:', content);
+        throw new Error('AI返回的格式不正确，请重试');
+      }
+
+      if (!Array.isArray(questions)) {
+        throw new Error('AI返回的数据格式不正确');
+      }
+
+      // 验证每个问题的格式
+      const validQuestions = questions.filter(q => 
+        q && typeof q === 'object' && 
+        typeof q.title === 'string' && 
+        q.title.trim().length > 0
+      ).map(q => ({
+        title: q.title.trim(),
+        description: (q.description || '').trim(),
+        category: (q.category || '日常思考').trim()
+      }));
+
+      if (validQuestions.length === 0) {
+        throw new Error('没有生成有效的问题');
+      }
+
+      // 保存到本地存储
+      const existingQuestions = JSON.parse(localStorage.getItem(STORAGE_KEYS.QUESTIONS) || '[]');
+      const newQuestions = validQuestions.map(q => ({
+        id: uuidv4(),
+        title: q.title,
+        description: q.description,
+        category: q.category,
+        createdAt: new Date().toISOString()
+      }));
+
+      existingQuestions.push(...newQuestions);
+      localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(existingQuestions));
+
+      return { 
+        message: `成功生成并添加了 ${newQuestions.length} 个问题`,
+        questions: newQuestions
+      };
+
+    } catch (error: any) {
+      console.error('AI生成失败:', error);
+      throw new Error(`AI生成失败: ${error.message}`);
+    }
   }
 };
